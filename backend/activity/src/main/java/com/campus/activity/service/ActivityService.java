@@ -11,6 +11,7 @@ import com.campus.activity.model.dto.ActivityRequest;
 import com.campus.activity.model.dto.ReviewRequest;
 import com.campus.activity.model.entity.Activity;
 import com.campus.activity.model.mapper.ActivityMapper;
+import com.campus.activity.model.mapper.RegistrationMapper;
 import com.campus.activity.model.row.ActivityDetailRow;
 import com.campus.activity.model.row.StudentRegistrationRow;
 import com.campus.activity.model.vo.ActivityDetailVO;
@@ -29,9 +30,15 @@ public class ActivityService {
     private static final String REVIEW_REJECTED = "REJECTED";
 
     private final ActivityMapper activityMapper;
+    private final RegistrationMapper registrationMapper;
+    private final NotificationService notificationService;
 
-    public ActivityService(ActivityMapper activityMapper) {
+    public ActivityService(ActivityMapper activityMapper,
+                           RegistrationMapper registrationMapper,
+                           NotificationService notificationService) {
         this.activityMapper = activityMapper;
+        this.registrationMapper = registrationMapper;
+        this.notificationService = notificationService;
     }
 
     public PageResult<ActivityListItemVO> list(int page, int size, String keyword, Integer campusId,
@@ -119,13 +126,46 @@ public class ActivityService {
     public ActivityMutationVO cancel(int activityId) {
         CurrentUser user = Access.require(Role.ORGANIZER, Role.ADMIN);
         validateOwnerOrAdmin(activityId, user);
+        var activity = activityMapper.findNotificationTarget(activityId);
+        List<Integer> studentIds = registrationMapper.findActiveStudentIds(activityId);
         activityMapper.cancelActivity(activityId);
+        if (activity != null) {
+            notificationService.createMany(
+                    studentIds,
+                    "ACTIVITY_CANCELLED",
+                    "活动已取消",
+                    "你报名或候补的《" + activity.getTitle() + "》已取消。",
+                    "ACTIVITY",
+                    activityId
+            );
+            if (user.role() == Role.ADMIN && activity.getOrganizerId() != null && activity.getOrganizerId() != user.id()) {
+                notificationService.create(
+                        activity.getOrganizerId(),
+                        "ACTIVITY_CANCELLED",
+                        "活动已取消",
+                        "管理员已取消《" + activity.getTitle() + "》。",
+                        "ACTIVITY",
+                        activityId
+                );
+            }
+        }
         return ActivityMutationVO.status(ActivityStatus.CANCELLED.name());
     }
 
     private ActivityMutationVO approve(int activityId, int adminId) {
         validateVenueConflict(activityId);
         activityMapper.approveActivity(activityId, adminId);
+        var activity = activityMapper.findNotificationTarget(activityId);
+        if (activity != null) {
+            notificationService.create(
+                    activity.getOrganizerId(),
+                    "ACTIVITY_APPROVED",
+                    "活动审核通过",
+                    "《" + activity.getTitle() + "》已发布。",
+                    "ACTIVITY",
+                    activityId
+            );
+        }
         return ActivityMutationVO.status(ActivityStatus.PUBLISHED.name());
     }
 
@@ -134,6 +174,17 @@ public class ActivityService {
             throw new BusinessException(40001, "驳回原因不能为空");
         }
         activityMapper.rejectActivity(activityId, adminId, reason);
+        var activity = activityMapper.findNotificationTarget(activityId);
+        if (activity != null) {
+            notificationService.create(
+                    activity.getOrganizerId(),
+                    "ACTIVITY_REJECTED",
+                    "活动审核驳回",
+                    "《" + activity.getTitle() + "》审核未通过，原因：" + reason,
+                    "ACTIVITY",
+                    activityId
+            );
+        }
         return ActivityMutationVO.status(ActivityStatus.REJECTED.name());
     }
 

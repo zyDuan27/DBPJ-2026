@@ -17,6 +17,7 @@ import com.campus.activity.service.CheckInService;
 import com.campus.activity.service.FeedbackService;
 import com.campus.activity.service.RegistrationService;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -82,6 +83,27 @@ class ActivityApplicationTests {
 
     @Autowired
     private FeedbackService feedbackService;
+
+    @BeforeEach
+    void ensureNotificationTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS Notification (
+                    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+                    recipient_id INT NOT NULL,
+                    type VARCHAR(40) NOT NULL,
+                    title VARCHAR(120) NOT NULL,
+                    content VARCHAR(500) NOT NULL,
+                    related_type VARCHAR(40),
+                    related_id INT,
+                    is_read TINYINT(1) NOT NULL DEFAULT 0,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_notification_recipient FOREIGN KEY (recipient_id)
+                        REFERENCES User(user_id)
+                        ON UPDATE CASCADE
+                        ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """);
+    }
 
     @Test
     void contextLoads() {
@@ -154,6 +176,52 @@ class ActivityApplicationTests {
                 .andExpect(jsonPath("$.data.activityId").value(fixture.activityId()))
                 .andExpect(jsonPath("$.data.registrationStatus").value("ENROLLED"))
                 .andExpect(jsonPath("$.data.registrationId").exists());
+    }
+
+    @Test
+    void mockMvcNotificationContractsStayStable() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+
+        mockMvc.perform(post("/api/v1/activities/{activityId}/registrations", fixture.activityId())
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000));
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.unreadCount").value(1));
+
+        Integer notificationId = jdbcTemplate.queryForObject("""
+                SELECT notification_id
+                FROM Notification
+                WHERE recipient_id = ? AND type = 'REGISTRATION_ENROLLED'
+                ORDER BY notification_id DESC
+                LIMIT 1
+                """, Integer.class, fixture.studentOneId());
+
+        mockMvc.perform(get("/api/v1/notifications")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .param("page", "1")
+                        .param("size", "10")
+                        .param("unreadOnly", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.list[0].notificationId").value(notificationId))
+                .andExpect(jsonPath("$.data.list[0].type").value("REGISTRATION_ENROLLED"))
+                .andExpect(jsonPath("$.data.list[0].read").value(false));
+
+        mockMvc.perform(patch("/api/v1/notifications/{notificationId}/read", notificationId)
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000));
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unreadCount").value(0));
     }
 
     @Test
@@ -276,6 +344,14 @@ class ActivityApplicationTests {
                 Integer.class,
                 fixture.activityId()
         )).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(DISTINCT recipient_id)
+                FROM Notification
+                WHERE recipient_id IN (%s)
+                  AND type IN ('REGISTRATION_ENROLLED', 'REGISTRATION_WAITLISTED')
+                """.formatted(String.join(",", studentIds.stream().map(String::valueOf).toList())),
+                Integer.class
+        )).isEqualTo(studentIds.size());
     }
 
     @Test
@@ -455,6 +531,9 @@ class ActivityApplicationTests {
     @AfterEach
     void cleanUp() {
         AuthContext.clear();
+        for (Integer userId : userIds) {
+            jdbcTemplate.update("DELETE FROM Notification WHERE recipient_id = ?", userId);
+        }
         for (Integer activityId : activityIds) {
             jdbcTemplate.update("DELETE FROM ActivityFeedback WHERE activity_id = ?", activityId);
             jdbcTemplate.update("DELETE FROM CreditRecord WHERE activity_id = ?", activityId);

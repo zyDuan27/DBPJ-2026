@@ -12,6 +12,7 @@ import ActivityFeedback from '../views/organizer/ActivityFeedback.vue'
 import AdminReviews from '../views/admin/AdminReviews.vue'
 import AdminDictionaries from '../views/admin/AdminDictionaries.vue'
 import AdminStats from '../views/admin/AdminStats.vue'
+import NotificationsView from '../views/NotificationsView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -26,6 +27,7 @@ const router = createRouter({
         { path: 'activities', component: StudentActivities },
         { path: 'activities/:id', component: ActivityDetail },
         { path: 'my-registrations', component: MyRegistrations },
+        { path: 'notifications', component: NotificationsView },
       ],
     },
     {
@@ -38,6 +40,7 @@ const router = createRouter({
         { path: 'activities/:id/edit', component: ActivityForm },
         { path: 'activities/:id/registrations', component: ActivityRegistrations },
         { path: 'activities/:id/feedback', component: ActivityFeedback },
+        { path: 'notifications', component: NotificationsView },
       ],
     },
     {
@@ -48,6 +51,7 @@ const router = createRouter({
         { path: 'reviews', component: AdminReviews },
         { path: 'dictionaries', component: AdminDictionaries },
         { path: 'stats', component: AdminStats },
+        { path: 'notifications', component: NotificationsView },
       ],
     },
   ],

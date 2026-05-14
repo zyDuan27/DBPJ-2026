@@ -8,6 +8,7 @@ import com.campus.activity.model.dto.CheckInRequest;
 import com.campus.activity.model.mapper.CreditRecordMapper;
 import com.campus.activity.model.mapper.RegistrationMapper;
 import com.campus.activity.model.row.CheckInTargetRow;
+import com.campus.activity.model.row.RegistrationNotifyRow;
 import com.campus.activity.model.vo.CheckInCodeVO;
 import com.campus.activity.model.vo.CheckInResultVO;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,13 +31,16 @@ public class CheckInService {
 
     private final RegistrationMapper registrationMapper;
     private final CreditRecordMapper creditRecordMapper;
+    private final NotificationService notificationService;
     private final String secret;
 
     public CheckInService(RegistrationMapper registrationMapper,
                           CreditRecordMapper creditRecordMapper,
+                          NotificationService notificationService,
                           @Value("${app.auth-secret}") String secret) {
         this.registrationMapper = registrationMapper;
         this.creditRecordMapper = creditRecordMapper;
+        this.notificationService = notificationService;
         this.secret = secret;
     }
 
@@ -77,6 +81,17 @@ public class CheckInService {
         }
         registrationMapper.markCheckedIn(registrationId);
         creditRecordMapper.insertCheckInCredit(user.id(), registrationId);
+        RegistrationNotifyRow target = registrationMapper.findNotificationTarget(registrationId);
+        if (target != null) {
+            notificationService.create(
+                    target.getStudentId(),
+                    "CHECK_IN_SUCCESS",
+                    "签到成功",
+                    "你已完成《" + target.getTitle() + "》签到。",
+                    "REGISTRATION",
+                    registrationId
+            );
+        }
         return new CheckInResultVO(registrationId, "CHECKED_IN", LocalDateTime.now().toString());
     }
 

@@ -14,6 +14,7 @@ import com.campus.activity.model.mapper.RegistrationMapper;
 import com.campus.activity.model.row.ActivityLockRow;
 import com.campus.activity.model.row.RegistrationActionRow;
 import com.campus.activity.model.row.RegistrationLockRow;
+import com.campus.activity.model.row.RegistrationNotifyRow;
 import com.campus.activity.model.vo.RegistrationActionVO;
 import com.campus.activity.model.vo.RegistrationListItemVO;
 import org.springframework.stereotype.Service;
@@ -28,13 +29,16 @@ public class RegistrationService {
     private final RegistrationMapper registrationMapper;
     private final ActivityMapper activityMapper;
     private final CreditRecordMapper creditRecordMapper;
+    private final NotificationService notificationService;
 
     public RegistrationService(RegistrationMapper registrationMapper,
                                ActivityMapper activityMapper,
-                               CreditRecordMapper creditRecordMapper) {
+                               CreditRecordMapper creditRecordMapper,
+                               NotificationService notificationService) {
         this.registrationMapper = registrationMapper;
         this.activityMapper = activityMapper;
         this.creditRecordMapper = creditRecordMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -68,6 +72,7 @@ public class RegistrationService {
         Integer promotedId = "ENROLLED".equals(registration.getStatus())
                 ? promoteNextWaitlisted(registration.getActivityId())
                 : null;
+        notifyRegistration(registrationId, "REGISTRATION_CANCELLED", "报名已取消", "你已取消该活动报名。");
         return RegistrationActionVO.cancelled(registrationId, promotedId);
     }
 
@@ -102,9 +107,18 @@ public class RegistrationService {
         if (endTime != null && LocalDateTime.now().isBefore(endTime)) {
             throw new BusinessException(40903, "活动结束后才能标记缺勤");
         }
+        List<RegistrationNotifyRow> absentTargets = registrationMapper.findEnrolledNotificationTargets(activityId);
         int absentCount = registrationMapper.markAbsences(activityId);
         if (absentCount > 0) {
             recordAbsences(activityId, absentCount, user.id());
+            absentTargets.forEach(row -> notificationService.create(
+                    row.getStudentId(),
+                    "ABSENCE_MARKED",
+                    "缺勤已记录",
+                    "你报名的《" + row.getTitle() + "》已被标记为缺勤。",
+                    "REGISTRATION",
+                    row.getRegistrationId()
+            ));
         }
         return RegistrationActionVO.absent(activityId, absentCount);
     }
@@ -133,6 +147,7 @@ public class RegistrationService {
     private RegistrationActionVO enrollDirectly(int studentId, int activityId) {
         int registrationId = upsertRegistration(studentId, activityId, "ENROLLED", null);
         activityMapper.incrementEnrollment(activityId);
+        notifyRegistration(registrationId, "REGISTRATION_ENROLLED", "报名成功", "你已成功报名该活动。");
         return RegistrationActionVO.enrollment(
                 registrationId,
                 activityId,
@@ -145,6 +160,7 @@ public class RegistrationService {
     private RegistrationActionVO waitlist(int studentId, int activityId) {
         Integer queueNo = registrationMapper.nextWaitlistQueueNo(activityId);
         int registrationId = upsertRegistration(studentId, activityId, "WAITLISTED", queueNo);
+        notifyRegistration(registrationId, "REGISTRATION_WAITLISTED", "已进入候补", "活动名额已满，你已进入候补队列。");
         return RegistrationActionVO.enrollment(
                 registrationId,
                 activityId,
@@ -172,6 +188,7 @@ public class RegistrationService {
         }
         registrationMapper.promoteRegistration(promotedId);
         activityMapper.incrementEnrollment(activityId);
+        notifyRegistration(promotedId, "WAITLIST_PROMOTED", "候补转正", "候补名额已转为正式报名，请按时参加活动。");
         return promotedId;
     }
 
@@ -194,6 +211,21 @@ public class RegistrationService {
         registration.setRegistrationId(existingId);
         registrationMapper.updateEnrollment(registration);
         return existingId;
+    }
+
+    private void notifyRegistration(int registrationId, String type, String title, String content) {
+        RegistrationNotifyRow row = registrationMapper.findNotificationTarget(registrationId);
+        if (row == null) {
+            return;
+        }
+        notificationService.create(
+                row.getStudentId(),
+                type,
+                title,
+                content.replace("该活动", "《" + row.getTitle() + "》"),
+                "REGISTRATION",
+                row.getRegistrationId()
+        );
     }
 
     private ActivityLockRow lockActivity(int activityId) {

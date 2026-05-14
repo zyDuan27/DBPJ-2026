@@ -8,6 +8,7 @@ SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS Notification;
 DROP TABLE IF EXISTS ActivityFeedback;
 DROP TABLE IF EXISTS CreditRecord;
 DROP TABLE IF EXISTS Registration;
@@ -185,6 +186,34 @@ CREATE TABLE CreditRecord (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信用分流水';
 
 -- 与登录、活动列表、报名名单、候补递补、反馈看板和信用统计匹配的索引。
+CREATE INDEX idx_user_role ON User(role);
+CREATE TABLE Notification (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    recipient_id INT NOT NULL COMMENT '接收用户',
+    type VARCHAR(40) NOT NULL COMMENT '通知类型',
+    title VARCHAR(120) NOT NULL COMMENT '通知标题',
+    content VARCHAR(500) NOT NULL COMMENT '通知内容',
+    related_type VARCHAR(40) COMMENT '关联对象类型：ACTIVITY / REGISTRATION',
+    related_id INT COMMENT '关联对象 ID',
+    is_read TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已读',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    CONSTRAINT fk_notification_recipient FOREIGN KEY (recipient_id)
+        REFERENCES User(user_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT chk_notification_type CHECK (type IN (
+        'ACTIVITY_APPROVED', 'ACTIVITY_REJECTED', 'ACTIVITY_CANCELLED',
+        'REGISTRATION_ENROLLED', 'REGISTRATION_WAITLISTED', 'REGISTRATION_CANCELLED',
+        'WAITLIST_PROMOTED', 'CHECK_IN_SUCCESS', 'ABSENCE_MARKED'
+    )),
+    CONSTRAINT chk_notification_related CHECK (
+        related_type IS NULL OR related_type IN ('ACTIVITY', 'REGISTRATION')
+    ),
+    CONSTRAINT chk_notification_read CHECK (is_read IN (0, 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内通知';
+
+CREATE INDEX idx_notification_recipient_read_time ON Notification(recipient_id, is_read, created_at);
+CREATE INDEX idx_notification_recipient_time ON Notification(recipient_id, created_at, notification_id);
 CREATE INDEX idx_user_role ON User(role);
 CREATE INDEX idx_user_username ON User(username);
 CREATE INDEX idx_activity_status_time ON Activity(status, start_time);

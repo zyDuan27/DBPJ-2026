@@ -5,6 +5,7 @@ import com.campus.activity.model.entity.Activity;
 import com.campus.activity.model.row.ActivityDetailRow;
 import com.campus.activity.model.row.ActivityListItemRow;
 import com.campus.activity.model.row.ActivityLockRow;
+import com.campus.activity.model.row.ActivityNotifyRow;
 import com.campus.activity.model.row.StudentRegistrationRow;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
@@ -147,6 +148,13 @@ public interface ActivityMapper extends BaseMapper<Activity> {
 
     @Select("SELECT organizer_id FROM Activity WHERE activity_id = #{activityId}")
     Integer findOrganizerId(@Param("activityId") int activityId);
+
+    @Select("""
+            SELECT activity_id AS activityId, title, organizer_id AS organizerId
+            FROM Activity
+            WHERE activity_id = #{activityId}
+            """)
+    ActivityNotifyRow findNotificationTarget(@Param("activityId") int activityId);
 
     @Select("""
             SELECT COUNT(*)

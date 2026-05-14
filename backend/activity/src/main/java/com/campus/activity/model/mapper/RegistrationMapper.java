@@ -6,6 +6,7 @@ import com.campus.activity.model.row.CheckInTargetRow;
 import com.campus.activity.model.row.RegistrationActionRow;
 import com.campus.activity.model.row.RegistrationListItemRow;
 import com.campus.activity.model.row.RegistrationLockRow;
+import com.campus.activity.model.row.RegistrationNotifyRow;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -34,6 +35,32 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
             FOR UPDATE
             """)
     CheckInTargetRow findCheckInTargetForUpdate(@Param("registrationId") int registrationId);
+
+    @Select("""
+            SELECT r.registration_id AS registrationId, r.student_id AS studentId,
+                   r.activity_id AS activityId, a.title
+            FROM Registration r
+            JOIN Activity a ON r.activity_id = a.activity_id
+            WHERE r.registration_id = #{registrationId}
+            """)
+    RegistrationNotifyRow findNotificationTarget(@Param("registrationId") int registrationId);
+
+    @Select("""
+            SELECT r.registration_id AS registrationId, r.student_id AS studentId,
+                   r.activity_id AS activityId, a.title
+            FROM Registration r
+            JOIN Activity a ON r.activity_id = a.activity_id
+            WHERE r.activity_id = #{activityId} AND r.status = 'ENROLLED'
+            """)
+    List<RegistrationNotifyRow> findEnrolledNotificationTargets(@Param("activityId") int activityId);
+
+    @Select("""
+            SELECT student_id
+            FROM Registration
+            WHERE activity_id = #{activityId}
+              AND status IN ('ENROLLED', 'WAITLISTED', 'CHECKED_IN')
+            """)
+    List<Integer> findActiveStudentIds(@Param("activityId") int activityId);
 
     @Update("""
             UPDATE Registration

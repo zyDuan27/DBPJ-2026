@@ -21,7 +21,10 @@
           <span class="header-subtitle">{{ userStore.user?.name }}</span>
         </div>
         <div class="header-actions">
-          <el-tag type="success" effect="plain">二期体验优化中</el-tag>
+          <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
+            <el-button :icon="Bell" circle @click="goNotifications" />
+          </el-badge>
+          <el-tag type="success" effect="plain">通知能力推进中</el-tag>
           <el-button @click="logout">退出</el-button>
         </div>
       </el-header>
@@ -33,24 +36,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { Bell } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { getUnreadCount } from '../api/notification'
 import { useUserStore } from '../stores/user'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
+const unreadCount = ref(0)
 
 const menus = computed(() => {
   if (userStore.user?.role === 'STUDENT') {
     return [
       { path: '/student/activities', label: '活动大厅' },
       { path: '/student/my-registrations', label: '我的活动' },
+      { path: '/student/notifications', label: '站内通知' },
     ]
   }
   if (userStore.user?.role === 'ORGANIZER') {
     return [
       { path: '/organizer/activities', label: '活动管理' },
       { path: '/organizer/activities/new', label: '创建活动' },
+      { path: '/organizer/notifications', label: '站内通知' },
     ]
   }
   return [
@@ -58,6 +67,7 @@ const menus = computed(() => {
     { path: '/admin/dictionaries', label: '资源管理' },
     { path: '/admin/stats', label: '统计概览' },
     { path: '/organizer/activities', label: '活动管理' },
+    { path: '/admin/notifications', label: '站内通知' },
   ]
 })
 
@@ -68,10 +78,29 @@ const roleName = computed(() => {
   return '校园活动'
 })
 
+const notificationPath = computed(() => {
+  if (userStore.user?.role === 'STUDENT') return '/student/notifications'
+  if (userStore.user?.role === 'ORGANIZER') return '/organizer/notifications'
+  return '/admin/notifications'
+})
+
 function logout() {
   userStore.logout()
   router.push('/login')
 }
+
+function goNotifications() {
+  router.push(notificationPath.value)
+}
+
+async function refreshUnread() {
+  if (!userStore.token) return
+  const data = await getUnreadCount() as any
+  unreadCount.value = Number(data.unreadCount || 0)
+}
+
+watch(() => route.fullPath, refreshUnread)
+onMounted(refreshUnread)
 </script>
 
 <style scoped>
@@ -153,6 +182,10 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.notification-badge {
+  line-height: 1;
 }
 
 .el-main {
