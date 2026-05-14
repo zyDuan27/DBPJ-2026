@@ -1,7 +1,8 @@
 package com.campus.activity.model.vo;
 
+import com.campus.activity.model.row.CreditRecordRow;
+
 import java.time.LocalDateTime;
-import java.util.Map;
 
 public record CreditRecordVO(Integer recordId,
                              Integer changeValue,
@@ -10,15 +11,15 @@ public record CreditRecordVO(Integer recordId,
                              LocalDateTime createdAt,
                              Integer activityId,
                              String activityTitle) {
-    public static CreditRecordVO from(Map<String, Object> row) {
+    public static CreditRecordVO from(CreditRecordRow row) {
         return new CreditRecordVO(
-                ActivityListItemVO.intValue(row.get("recordId")),
-                ActivityListItemVO.intValue(row.get("changeValue")),
-                ActivityListItemVO.stringValue(row.get("reasonType")),
-                ActivityListItemVO.stringValue(row.get("reason")),
-                ActivityListItemVO.timeValue(row.get("createdAt")),
-                ActivityListItemVO.intValue(row.get("activityId")),
-                ActivityListItemVO.stringValue(row.get("activityTitle"))
+                row.getRecordId(),
+                row.getChangeValue(),
+                row.getReasonType(),
+                row.getReason(),
+                row.getCreatedAt(),
+                row.getActivityId(),
+                row.getActivityTitle()
         );
     }
 }

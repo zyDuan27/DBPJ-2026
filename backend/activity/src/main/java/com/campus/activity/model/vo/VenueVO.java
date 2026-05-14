@@ -1,6 +1,6 @@
 package com.campus.activity.model.vo;
 
-import java.util.Map;
+import com.campus.activity.model.row.VenueRow;
 
 public record VenueVO(Integer id,
                       String venueName,
@@ -8,14 +8,14 @@ public record VenueVO(Integer id,
                       Integer capacity,
                       Integer campusId,
                       String campusName) {
-    public static VenueVO from(Map<String, Object> row) {
+    public static VenueVO from(VenueRow row) {
         return new VenueVO(
-                ActivityListItemVO.intValue(row.get("id")),
-                ActivityListItemVO.stringValue(row.get("venueName")),
-                ActivityListItemVO.stringValue(row.get("roomNumber")),
-                ActivityListItemVO.intValue(row.get("capacity")),
-                ActivityListItemVO.intValue(row.get("campusId")),
-                ActivityListItemVO.stringValue(row.get("campusName"))
+                row.getId(),
+                row.getVenueName(),
+                row.getRoomNumber(),
+                row.getCapacity(),
+                row.getCampusId(),
+                row.getCampusName()
         );
     }
 }

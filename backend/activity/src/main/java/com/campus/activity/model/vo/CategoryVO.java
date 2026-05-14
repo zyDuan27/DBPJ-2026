@@ -1,12 +1,12 @@
 package com.campus.activity.model.vo;
 
-import java.util.Map;
+import com.campus.activity.model.row.CategoryRow;
 
 public record CategoryVO(Integer id, String categoryName) {
-    public static CategoryVO from(Map<String, Object> row) {
+    public static CategoryVO from(CategoryRow row) {
         return new CategoryVO(
-                ActivityListItemVO.intValue(row.get("id")),
-                ActivityListItemVO.stringValue(row.get("categoryName"))
+                row.getId(),
+                row.getCategoryName()
         );
     }
 }

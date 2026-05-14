@@ -318,45 +318,6 @@ BEGIN
     END IF;
 END//
 
-CREATE TRIGGER trg_registration_ai_enrollment
-AFTER INSERT ON Registration
-FOR EACH ROW
-BEGIN
-    IF NEW.status IN ('ENROLLED', 'CHECKED_IN') THEN
-        UPDATE Activity
-        SET current_enrollment = current_enrollment + 1
-        WHERE activity_id = NEW.activity_id;
-    END IF;
-END//
-
-CREATE TRIGGER trg_registration_au_enrollment
-AFTER UPDATE ON Registration
-FOR EACH ROW
-BEGIN
-    IF OLD.status NOT IN ('ENROLLED', 'CHECKED_IN')
-       AND NEW.status IN ('ENROLLED', 'CHECKED_IN') THEN
-        UPDATE Activity
-        SET current_enrollment = current_enrollment + 1
-        WHERE activity_id = NEW.activity_id;
-    ELSEIF OLD.status IN ('ENROLLED', 'CHECKED_IN')
-       AND NEW.status NOT IN ('ENROLLED', 'CHECKED_IN') THEN
-        UPDATE Activity
-        SET current_enrollment = GREATEST(current_enrollment - 1, 0)
-        WHERE activity_id = OLD.activity_id;
-    END IF;
-END//
-
-CREATE TRIGGER trg_registration_ad_enrollment
-AFTER DELETE ON Registration
-FOR EACH ROW
-BEGIN
-    IF OLD.status IN ('ENROLLED', 'CHECKED_IN') THEN
-        UPDATE Activity
-        SET current_enrollment = GREATEST(current_enrollment - 1, 0)
-        WHERE activity_id = OLD.activity_id;
-    END IF;
-END//
-
 CREATE TRIGGER trg_feedback_bi_validate
 BEFORE INSERT ON ActivityFeedback
 FOR EACH ROW
@@ -448,7 +409,7 @@ INSERT INTO Category(category_name) VALUES
 ('志愿服务');
 
 INSERT INTO Activity(
-    title, start_time, end_time, enroll_deadline, capacity_limit,
+    title, start_time, end_time, enroll_deadline, capacity_limit, current_enrollment,
     status, poster_url, description, venue_id, category_id, organizer_id, admin_id
 ) VALUES
 (
@@ -457,6 +418,7 @@ INSERT INTO Activity(
     '2026-05-20 16:00:00',
     '2026-05-19 22:00:00',
     80,
+    2,
     'PUBLISHED',
     '',
     '面向数据库课程项目的小型分享会，介绍活动报名系统的设计与实现。',
@@ -471,6 +433,7 @@ INSERT INTO Activity(
     '2026-05-22 11:00:00',
     '2026-05-21 18:00:00',
     50,
+    0,
     'PUBLISHED',
     '',
     '面向新志愿者的流程培训和经验分享。',

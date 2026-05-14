@@ -1,19 +1,19 @@
 package com.campus.activity.model.vo;
 
-import java.util.Map;
+import com.campus.activity.model.row.StatsOverviewRow;
 
 public record StatsOverviewVO(Long activityCount,
                               Long pendingReviewCount,
                               Long publishedCount,
                               Long registrationCount,
                               Long checkedInCount) {
-    public static StatsOverviewVO from(Map<String, Object> row) {
+    public static StatsOverviewVO from(StatsOverviewRow row) {
         return new StatsOverviewVO(
-                longValue(row.get("activityCount")),
-                longValue(row.get("pendingReviewCount")),
-                longValue(row.get("publishedCount")),
-                longValue(row.get("registrationCount")),
-                longValue(row.get("checkedInCount"))
+                row.getActivityCount(),
+                row.getPendingReviewCount(),
+                row.getPublishedCount(),
+                row.getRegistrationCount(),
+                row.getCheckedInCount()
         );
     }
 

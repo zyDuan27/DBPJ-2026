@@ -2,13 +2,15 @@ package com.campus.activity.model.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.campus.activity.model.entity.CreditRecord;
+import com.campus.activity.model.row.CreditRecordRow;
+import com.campus.activity.model.row.CreditRiskStudentRow;
+import com.campus.activity.model.row.CreditSummaryRow;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
-import java.util.Map;
 
 @Mapper
 public interface CreditRecordMapper extends BaseMapper<CreditRecord> {
@@ -19,7 +21,7 @@ public interface CreditRecordMapper extends BaseMapper<CreditRecord> {
                    SUM(CASE WHEN reason_type = 'CHECK_IN' THEN 1 ELSE 0 END) AS checkInCreditCount
             FROM CreditRecord
             """)
-    Map<String, Object> overviewSummary();
+    CreditSummaryRow overviewSummary();
 
     @Select("""
             SELECT u.user_id AS studentId, u.username AS studentName, u.student_no AS studentNo,
@@ -33,7 +35,7 @@ public interface CreditRecordMapper extends BaseMapper<CreditRecord> {
             ORDER BY creditScore ASC, absentCount DESC
             LIMIT 10
             """)
-    List<Map<String, Object>> riskStudents();
+    List<CreditRiskStudentRow> riskStudents();
 
     @Select("""
             SELECT COALESCE(SUM(change_value), 0)
@@ -55,9 +57,9 @@ public interface CreditRecordMapper extends BaseMapper<CreditRecord> {
             ORDER BY c.created_at DESC, c.record_id DESC
             LIMIT #{offset}, #{size}
             """)
-    List<Map<String, Object>> studentRecords(@Param("studentId") int studentId,
-                                             @Param("offset") int offset,
-                                             @Param("size") int size);
+    List<CreditRecordRow> studentRecords(@Param("studentId") int studentId,
+                                         @Param("offset") int offset,
+                                         @Param("size") int size);
 
     @Insert("""
             INSERT IGNORE INTO CreditRecord(student_id, activity_id, registration_id, change_value, reason_type, reason, operator_id)

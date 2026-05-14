@@ -132,6 +132,7 @@ public class RegistrationService {
 
     private RegistrationActionVO enrollDirectly(int studentId, int activityId) {
         int registrationId = upsertRegistration(studentId, activityId, "ENROLLED", null);
+        activityMapper.incrementEnrollment(activityId);
         return RegistrationActionVO.enrollment(
                 registrationId,
                 activityId,
@@ -164,15 +165,18 @@ public class RegistrationService {
 
     private Integer promoteNextWaitlisted(int activityId) {
         lockActivity(activityId);
+        activityMapper.decrementEnrollment(activityId);
         Integer promotedId = registrationMapper.findNextWaitlisted(activityId);
         if (promotedId == null) {
             return null;
         }
         registrationMapper.promoteRegistration(promotedId);
+        activityMapper.incrementEnrollment(activityId);
         return promotedId;
     }
 
     private void recordAbsences(int activityId, int absentCount, int operatorId) {
+        activityMapper.decreaseEnrollmentBy(activityId, absentCount);
         creditRecordMapper.insertAbsenceCredits(activityId, operatorId);
     }
 

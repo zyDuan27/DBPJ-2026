@@ -1,18 +1,19 @@
 package com.campus.activity.model.vo;
 
+import com.campus.activity.model.row.CategoryPopularityRow;
+
 import java.math.BigDecimal;
-import java.util.Map;
 
 public record CategoryPopularityVO(Integer categoryId,
                                    String categoryName,
                                    Long activityCount,
                                    BigDecimal averageEnrollment) {
-    public static CategoryPopularityVO from(Map<String, Object> row) {
+    public static CategoryPopularityVO from(CategoryPopularityRow row) {
         return new CategoryPopularityVO(
-                ActivityListItemVO.intValue(row.get("categoryId")),
-                ActivityListItemVO.stringValue(row.get("categoryName")),
-                StatsOverviewVO.longValue(row.get("activityCount")),
-                decimalValue(row.get("averageEnrollment"))
+                row.getCategoryId(),
+                row.getCategoryName(),
+                row.getActivityCount(),
+                row.getAverageEnrollment() == null ? BigDecimal.ZERO : row.getAverageEnrollment()
         );
     }
 

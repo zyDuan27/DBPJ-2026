@@ -20,9 +20,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -30,11 +33,25 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.blankOrNullString;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 class ActivityApplicationTests {
     private static final String TEST_PASSWORD_HASH =
             "pbkdf2$120000$ZGJwai0yMDI2LXRlc3Qtc2VlZA==$Z7kG5pEEo62BsGNBwn7JqwppwrnIYLeR4lTvLrVzz6M=";
@@ -47,6 +64,9 @@ class ActivityApplicationTests {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Autowired
     private ActivityService activityService;
@@ -78,6 +98,91 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void mockMvcLoginReturnsStableContract() throws Exception {
+        insertUser("STUDENT", "contract-login", "C" + Long.toString(System.nanoTime()).substring(0, 12), uniquePhone("198"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"username":"contract-login","password":"123456"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.message").value("success"))
+                .andExpect(jsonPath("$.data.token", not(blankOrNullString())))
+                .andExpect(jsonPath("$.data.user.role").value("STUDENT"))
+                .andExpect(jsonPath("$.data.user.name").value("contract-login"));
+    }
+
+    @Test
+    void mockMvcProtectedEndpointRequiresToken() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40101))
+                .andExpect(jsonPath("$.data").doesNotExist());
+    }
+
+    @Test
+    void mockMvcRejectsCrossRoleAccess() throws Exception {
+        int studentId = insertUser("STUDENT", "contract-student", "M" + Long.toString(System.nanoTime()).substring(0, 12), uniquePhone("197"));
+
+        mockMvc.perform(get("/api/v1/stats/overview")
+                        .header("Authorization", bearer(student(studentId, "contract-student"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40301));
+    }
+
+    @Test
+    void mockMvcActivityListAndEnrollmentContractsStayStable() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+
+        mockMvc.perform(get("/api/v1/activities")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .param("page", "1")
+                        .param("size", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.list").isArray())
+                .andExpect(jsonPath("$.data.total").exists())
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(5));
+
+        mockMvc.perform(post("/api/v1/activities/{activityId}/registrations", fixture.activityId())
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.activityId").value(fixture.activityId()))
+                .andExpect(jsonPath("$.data.registrationStatus").value("ENROLLED"))
+                .andExpect(jsonPath("$.data.registrationId").exists());
+    }
+
+    @Test
+    void mockMvcOrganizerCannotReadOthersRegistrationList() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        int otherOrganizerId = insertUser("ORGANIZER", "contract-other-organizer", null, uniquePhone("196"));
+
+        mockMvc.perform(get("/api/v1/activities/{activityId}/registrations", fixture.activityId())
+                        .header("Authorization", bearer(organizer(otherOrganizerId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40301));
+    }
+
+    @Test
+    void mockMvcCheckInRejectsMalformedCodeWithStableErrorContract() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+
+        mockMvc.perform(patch("/api/v1/registrations/check-in")
+                        .header("Authorization", bearer(organizer(fixture.organizerId())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"checkInCode":"malformed-code"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40001))
+                .andExpect(jsonPath("$.message").value("签到码格式错误"));
+    }
+
+    @Test
     void enrollmentWaitlistAndPromotionFlow() {
         TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 1);
 
@@ -101,6 +206,71 @@ class ActivityApplicationTests {
                 WHERE registration_id = ?
                 """, waitlisted.registrationId());
         assertThat(promoted.get("status")).isEqualTo("ENROLLED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT current_enrollment FROM Activity WHERE activity_id = ?",
+                Integer.class,
+                fixture.activityId()
+        )).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentEnrollmentDoesNotOversellAndKeepsWaitlistOrdered() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 1);
+        List<Integer> studentIds = new ArrayList<>();
+        studentIds.add(fixture.studentOneId());
+        studentIds.add(fixture.studentTwoId());
+        for (int i = 0; i < 4; i++) {
+            studentIds.add(insertUser(
+                    "STUDENT",
+                    "concurrent-student-" + i + "-" + System.nanoTime(),
+                    "Q" + Long.toString(System.nanoTime()).substring(0, 12),
+                    uniquePhone("195")
+            ));
+        }
+
+        CountDownLatch ready = new CountDownLatch(studentIds.size());
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(studentIds.size());
+        try {
+            List<Callable<RegistrationActionVO>> tasks = studentIds.stream()
+                    .<Callable<RegistrationActionVO>>map(studentId -> () -> {
+                        ready.countDown();
+                        start.await(5, TimeUnit.SECONDS);
+                        AuthContext.set(student(studentId, "concurrent-" + studentId));
+                        try {
+                            return registrationService.enroll(fixture.activityId());
+                        } finally {
+                            AuthContext.clear();
+                        }
+                    })
+                    .toList();
+            List<Future<RegistrationActionVO>> futures = tasks.stream().map(executor::submit).toList();
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            for (Future<RegistrationActionVO> future : futures) {
+                assertThat(future.get(10, TimeUnit.SECONDS).registrationStatus())
+                        .isIn("ENROLLED", "WAITLISTED");
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        Map<String, Object> statusCounts = jdbcTemplate.queryForMap("""
+                SELECT
+                  SUM(CASE WHEN status = 'ENROLLED' THEN 1 ELSE 0 END) AS enrolledCount,
+                  SUM(CASE WHEN status = 'WAITLISTED' THEN 1 ELSE 0 END) AS waitlistedCount,
+                  COUNT(DISTINCT queue_no) AS distinctQueueCount,
+                  MIN(queue_no) AS minQueueNo,
+                  MAX(queue_no) AS maxQueueNo
+                FROM Registration
+                WHERE activity_id = ?
+                """, fixture.activityId());
+        int waitlistedCount = ((Number) statusCounts.get("waitlistedCount")).intValue();
+        assertThat(((Number) statusCounts.get("enrolledCount")).intValue()).isEqualTo(1);
+        assertThat(waitlistedCount).isEqualTo(studentIds.size() - 1);
+        assertThat(((Number) statusCounts.get("distinctQueueCount")).intValue()).isEqualTo(waitlistedCount);
+        assertThat(((Number) statusCounts.get("minQueueNo")).intValue()).isEqualTo(1);
+        assertThat(((Number) statusCounts.get("maxQueueNo")).intValue()).isEqualTo(waitlistedCount);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT current_enrollment FROM Activity WHERE activity_id = ?",
                 Integer.class,
@@ -360,7 +530,7 @@ class ActivityApplicationTests {
     }
 
     private String uniquePhone(String prefix) {
-        return prefix + Long.toString(System.nanoTime()).substring(0, 8);
+        return prefix + Long.toUnsignedString(System.nanoTime(), 36);
     }
 
     private CurrentUser student(int userId, String name) {
@@ -373,6 +543,10 @@ class ActivityApplicationTests {
 
     private CurrentUser admin() {
         return new CurrentUser(1, "test-admin", Role.ADMIN, null, "10000000000");
+    }
+
+    private String bearer(CurrentUser user) {
+        return "Bearer " + authService.issueToken(user);
     }
 
     private ActivityRequest validActivityRequest(TestFixture fixture) {

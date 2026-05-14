@@ -1,10 +1,12 @@
 package com.campus.activity.model.mapper;
 
+import com.campus.activity.model.row.CampusUsageRow;
+import com.campus.activity.model.row.CategoryPopularityRow;
+import com.campus.activity.model.row.StatsOverviewRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
-import java.util.Map;
 
 @Mapper
 public interface StatsMapper {
@@ -16,7 +18,7 @@ public interface StatsMapper {
               (SELECT COUNT(*) FROM Registration WHERE status IN ('ENROLLED', 'WAITLISTED', 'CHECKED_IN')) AS registrationCount,
               (SELECT COUNT(*) FROM Registration WHERE status = 'CHECKED_IN') AS checkedInCount
             """)
-    Map<String, Object> overview();
+    StatsOverviewRow overview();
 
     @Select("""
             SELECT c.campus_id AS campusId, c.campus_name AS campusName,
@@ -28,7 +30,7 @@ public interface StatsMapper {
             GROUP BY c.campus_id, c.campus_name
             ORDER BY c.campus_id
             """)
-    List<Map<String, Object>> campusUsage();
+    List<CampusUsageRow> campusUsage();
 
     @Select("""
             SELECT cat.category_id AS categoryId, cat.category_name AS categoryName,
@@ -39,5 +41,5 @@ public interface StatsMapper {
             GROUP BY cat.category_id, cat.category_name
             ORDER BY activityCount DESC
             """)
-    List<Map<String, Object>> categoryPopularity();
+    List<CategoryPopularityRow> categoryPopularity();
 }
