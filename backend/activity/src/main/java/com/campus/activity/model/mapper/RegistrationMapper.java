@@ -74,7 +74,7 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
 
     @Update("""
             UPDATE Registration
-            SET status = 'CANCELLED'
+            SET status = 'CANCELLED', queue_no = NULL
             WHERE registration_id = #{registrationId}
             """)
     int cancelRegistration(@Param("registrationId") int registrationId);
@@ -97,7 +97,7 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
 
     @Update("""
             UPDATE Registration
-            SET status = 'ENROLLED'
+            SET status = 'ENROLLED', queue_no = NULL
             WHERE registration_id = #{registrationId}
             """)
     int promoteRegistration(@Param("registrationId") int registrationId);

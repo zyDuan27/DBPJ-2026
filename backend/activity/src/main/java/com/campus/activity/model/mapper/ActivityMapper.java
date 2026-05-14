@@ -178,24 +178,4 @@ public interface ActivityMapper extends BaseMapper<Activity> {
             """)
     ActivityLockRow lockActivity(@Param("activityId") int activityId);
 
-    @Update("""
-            UPDATE Activity
-            SET current_enrollment = current_enrollment + 1
-            WHERE activity_id = #{activityId}
-            """)
-    int incrementEnrollment(@Param("activityId") int activityId);
-
-    @Update("""
-            UPDATE Activity
-            SET current_enrollment = current_enrollment - 1
-            WHERE activity_id = #{activityId}
-            """)
-    int decrementEnrollment(@Param("activityId") int activityId);
-
-    @Update("""
-            UPDATE Activity
-            SET current_enrollment = GREATEST(current_enrollment - #{count}, 0)
-            WHERE activity_id = #{activityId}
-            """)
-    int decreaseEnrollmentBy(@Param("activityId") int activityId, @Param("count") int count);
 }

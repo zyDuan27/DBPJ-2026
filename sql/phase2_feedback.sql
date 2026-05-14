@@ -10,11 +10,21 @@ CREATE TABLE IF NOT EXISTS ActivityFeedback (
     content VARCHAR(1000) COMMENT '文字反馈',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '首次评价时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
-    CONSTRAINT fk_feedback_registration FOREIGN KEY (registration_id) REFERENCES Registration(registration_id),
-    CONSTRAINT fk_feedback_activity FOREIGN KEY (activity_id) REFERENCES Activity(activity_id),
-    CONSTRAINT fk_feedback_student FOREIGN KEY (student_id) REFERENCES User(user_id),
+    CONSTRAINT fk_feedback_registration FOREIGN KEY (registration_id)
+        REFERENCES Registration(registration_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_feedback_activity FOREIGN KEY (activity_id)
+        REFERENCES Activity(activity_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_feedback_student FOREIGN KEY (student_id)
+        REFERENCES User(user_id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
     CONSTRAINT uq_feedback_registration UNIQUE (registration_id),
     CONSTRAINT chk_feedback_rating CHECK (rating BETWEEN 1 AND 5),
-    KEY idx_feedback_activity_rating (activity_id, rating),
+    KEY idx_feedback_activity_rating_updated (activity_id, rating, updated_at),
+    KEY idx_feedback_activity_updated (activity_id, updated_at),
     KEY idx_feedback_student_activity (student_id, activity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
