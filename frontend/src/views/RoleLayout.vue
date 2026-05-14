@@ -24,7 +24,7 @@
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
             <el-button :icon="Bell" circle @click="goNotifications" />
           </el-badge>
-          <el-tag type="success" effect="plain">通知能力推进中</el-tag>
+          <el-tag type="success" effect="plain">智能查询一期</el-tag>
           <el-button @click="logout">退出</el-button>
         </div>
       </el-header>
@@ -52,6 +52,7 @@ const menus = computed(() => {
     return [
       { path: '/student/activities', label: '活动大厅' },
       { path: '/student/my-registrations', label: '我的活动' },
+      { path: '/student/query', label: '智能查询' },
       { path: '/student/notifications', label: '站内通知' },
     ]
   }
@@ -59,6 +60,7 @@ const menus = computed(() => {
     return [
       { path: '/organizer/activities', label: '活动管理' },
       { path: '/organizer/activities/new', label: '创建活动' },
+      { path: '/organizer/query', label: '智能查询' },
       { path: '/organizer/notifications', label: '站内通知' },
     ]
   }
@@ -66,6 +68,7 @@ const menus = computed(() => {
     { path: '/admin/reviews', label: '审核中心' },
     { path: '/admin/dictionaries', label: '资源管理' },
     { path: '/admin/stats', label: '统计概览' },
+    { path: '/admin/query', label: '智能查询' },
     { path: '/organizer/activities', label: '活动管理' },
     { path: '/admin/notifications', label: '站内通知' },
   ]

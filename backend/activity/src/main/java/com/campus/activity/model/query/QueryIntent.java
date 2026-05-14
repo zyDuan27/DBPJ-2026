@@ -1,0 +1,14 @@
+package com.campus.activity.model.query;
+
+public enum QueryIntent {
+    ACTIVITY_LIST,
+    ACTIVITY_REGISTRATION_LIST,
+    WAITLIST_TOP,
+    MY_REGISTRATION_LIST,
+    CHECK_IN_STATUS,
+    ABSENCE_LIST,
+    LOW_RATING_FEEDBACK,
+    CREDIT_RISK,
+    CREDIT_RECORDS,
+    NOTIFICATION_LIST
+}

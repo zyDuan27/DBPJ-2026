@@ -225,6 +225,61 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void mockMvcNaturalQueryContractsStayStable() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        int adminId = insertUser("ADMIN", "natural-query-admin", null, uniquePhone("194"));
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询明天的活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_LIST"))
+                .andExpect(jsonPath("$.data.summary").exists())
+                .andExpect(jsonPath("$.data.columns").isArray())
+                .andExpect(jsonPath("$.data.rows").isArray())
+                .andExpect(jsonPath("$.data.sqlPreview").doesNotExist());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(admin(adminId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询待审核活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_LIST"))
+                .andExpect(jsonPath("$.data.sqlPreview").exists());
+    }
+
+    @Test
+    void mockMvcNaturalQueryRejectsUnknownAndUnauthorizedQuestions() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        int adminId = insertUser("ADMIN", "natural-query-admin-reject", null, uniquePhone("193"));
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询报名名单","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40301));
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(admin(adminId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"帮我删除所有活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(40002));
+    }
+
+    @Test
     void mockMvcOrganizerCannotReadOthersRegistrationList() throws Exception {
         TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
         int otherOrganizerId = insertUser("ORGANIZER", "contract-other-organizer", null, uniquePhone("196"));
@@ -622,6 +677,10 @@ class ActivityApplicationTests {
 
     private CurrentUser admin() {
         return new CurrentUser(1, "test-admin", Role.ADMIN, null, "10000000000");
+    }
+
+    private CurrentUser admin(int userId) {
+        return new CurrentUser(userId, "test-admin", Role.ADMIN, null, "1" + userId);
     }
 
     private String bearer(CurrentUser user) {
