@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: campus-activity-system
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../../.env[.properties]
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/campus_activity?useUnicode=true&characterEncoding=utf8&connectionCollation=utf8mb4_0900_ai_ci&serverTimezone=Asia/Shanghai}
     username: ${DB_USERNAME:campus}
@@ -17,3 +21,14 @@ app:
   security:
     password:
       iterations: ${APP_PASSWORD_HASH_ITERATIONS:120000}
+
+llm:
+  enabled: ${LLM_ENABLED:false}
+  provider: ${LLM_PROVIDER:openai-compatible}
+  api-key: ${LLM_API_KEY:}
+  base-url: ${LLM_BASE_URL:https://api.openai.com/v1}
+  model: ${LLM_MODEL:gpt-4.1-mini}
+  timeout-ms: ${LLM_TIMEOUT_MS:15000}
+  response-format-enabled: ${LLM_RESPONSE_FORMAT_ENABLED:false}
+  repair-enabled: ${LLM_REPAIR_ENABLED:false}
+  summary-enabled: ${LLM_SUMMARY_ENABLED:false}

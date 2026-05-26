@@ -5,7 +5,7 @@
         <h1 class="page-title">智能查询</h1>
         <p class="page-subtitle">用自然语言查询活动、报名、签到、反馈、信用和通知数据。</p>
       </div>
-      <el-button :icon="Refresh" @click="submit">刷新</el-button>
+      <el-button :icon="Refresh" :loading="loading" @click="submit">刷新</el-button>
     </div>
 
     <div class="panel query-panel">
@@ -34,13 +34,36 @@
       </div>
     </div>
 
-    <div v-if="result" class="panel result-panel">
+    <div v-if="result?.clarificationRequired" class="panel clarification-panel">
       <div class="result-summary">
         <div>
           <strong>{{ result.summary }}</strong>
-          <span class="muted">意图：{{ result.intent }}，共 {{ result.total }} 条</span>
+          <span class="muted">系统需要更多条件来缩小查询范围</span>
         </div>
-        <el-tag effect="plain">第 {{ result.page }} 页 / 每页 {{ result.size }} 条</el-tag>
+        <el-tag effect="plain" type="warning">需要确认</el-tag>
+      </div>
+      <div class="clarification-list">
+        <el-button
+          v-for="item in result.clarificationOptions"
+          :key="item"
+          plain
+          @click="useExample(item)"
+        >
+          {{ item }}
+        </el-button>
+      </div>
+    </div>
+
+    <div v-else-if="result" class="panel result-panel">
+      <div class="result-summary">
+        <div>
+          <strong>{{ result.summary }}</strong>
+          <span class="muted">意图：{{ result.intent || '待确认' }}，共 {{ result.total }} 条</span>
+        </div>
+        <div class="result-tools">
+          <el-button size="small" :icon="MagicStick" :loading="loading" @click="submit">重新生成摘要</el-button>
+          <el-tag effect="plain">第 {{ result.page }} 页 / 每页 {{ result.size }} 条</el-tag>
+        </div>
       </div>
 
       <el-empty v-if="result.rows.length === 0" description="暂无匹配数据" />
@@ -67,8 +90,11 @@
         />
       </div>
 
-      <el-collapse v-if="showSqlPreview && result.sqlPreview" class="sql-preview">
-        <el-collapse-item title="SQL 预览" name="sql">
+      <el-collapse v-if="showSqlPreview && (result.sqlPreview || result.planPreview)" class="sql-preview">
+        <el-collapse-item v-if="result.planPreview" title="查询理解预览" name="plan">
+          <pre>{{ prettyPlan }}</pre>
+        </el-collapse-item>
+        <el-collapse-item v-if="result.sqlPreview" title="SQL 预览" name="sql">
           <pre>{{ result.sqlPreview }}</pre>
         </el-collapse-item>
       </el-collapse>
@@ -88,8 +114,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
-import { runNaturalQuery } from '../api/naturalQuery'
+import { MagicStick, Refresh, Search } from '@element-plus/icons-vue'
+import { runNaturalQuery, type NaturalQueryResult } from '../api/naturalQuery'
 import { useUserStore } from '../stores/user'
 
 const userStore = useUserStore()
@@ -97,7 +123,7 @@ const question = ref('查询明天的活动')
 const page = ref(1)
 const size = ref(20)
 const loading = ref(false)
-const result = ref<any>(null)
+const result = ref<NaturalQueryResult | null>(null)
 
 const examples = computed(() => {
   if (userStore.user?.role === 'STUDENT') {
@@ -110,6 +136,7 @@ const examples = computed(() => {
 })
 
 const showSqlPreview = computed(() => userStore.user?.role === 'ADMIN')
+const prettyPlan = computed(() => JSON.stringify(result.value?.planPreview || {}, null, 2))
 
 function useExample(value: string) {
   question.value = value
@@ -129,6 +156,10 @@ async function submit() {
       page: page.value,
       size: size.value,
     })
+    if (result.value.clarificationRequired) {
+      page.value = result.value.page
+      size.value = result.value.size
+    }
   } finally {
     loading.value = false
   }
@@ -158,6 +189,10 @@ async function submit() {
   margin-bottom: 16px;
 }
 
+.clarification-panel {
+  margin-bottom: 16px;
+}
+
 .result-summary {
   display: flex;
   justify-content: space-between;
@@ -179,6 +214,19 @@ async function submit() {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.result-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.clarification-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .sql-preview {

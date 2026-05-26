@@ -6,6 +6,8 @@
 
 当前版本已经具备较完整的演示闭环：后端采用 Spring Boot + MyBatis-Plus，前端采用 Vue 3 + Vite + Element Plus，数据库脚本包含建表、约束、索引、触发器和初始化测试数据。
 
+当前版本已加入智能查询一期增强：支持 OpenAI-compatible 模型将自然语言转换为受控 QueryPlan，再由后端白名单 SQL 编译器执行只读查询。未启用模型或模型调用失败时，会自动降级到规则解析。
+
 ## 功能概览
 
 ### 学生端
@@ -41,12 +43,22 @@
 - 组合索引覆盖活动列表、报名名单、候补队列、反馈统计、信用统计、通知列表。
 - MockMvc 接口契约测试和报名并发一致性测试。
 
+### 智能查询
+
+- 学生、组织者、管理员均可进入智能查询页面。
+- 支持活动、报名、签到、缺勤、反馈、信用、通知等业务查询。
+- 模型只生成 QueryPlan JSON，不直接执行模型生成的 SQL。
+- SQL 构建强制使用后端白名单字段、筛选条件、JOIN 和分页。
+- 支持模糊场地查询，例如“查询在光华楼的活动”。
+- 管理员可查看 QueryPlan 预览和 SQL 预览；普通用户隐藏 SQL 细节。
+- 过宽或含糊的问题会返回追问选项。
+
 ## 技术栈
 
 | 层级 | 技术 |
 | :--- | :--- |
 | 前端 | Vue 3、Vite、TypeScript、Element Plus、Pinia、Vue Router、Axios |
-| 后端 | Spring Boot 4、Spring WebMVC、MyBatis-Plus、Spring JDBC、HikariCP、Bean Validation |
+| 后端 | Spring Boot 4、Spring WebMVC、MyBatis-Plus、Spring JDBC、HikariCP、Bean Validation、RestClient |
 | 数据库 | MySQL 8.4.8 LTS |
 | 测试 | JUnit 5、Spring Boot Test、MockMvc |
 | 部署辅助 | Docker Compose |
@@ -172,15 +184,36 @@ java -jar target/activity-0.0.1-SNAPSHOT.jar
 http://localhost:8080
 ```
 
-后端配置文件位于 [application.yml](./backend/activity/src/main/resources/application.yml)。支持通过环境变量覆盖敏感配置：
+后端配置文件位于 [application.yml](./backend/activity/src/main/resources/application.yml)。建议从仓库根目录复制 `.env.example` 为 `.env` 后填写本地配置。Spring Boot 启动时会读取项目根目录 `.env`，也支持通过系统环境变量覆盖。
 
-```text
-DB_URL
-DB_USERNAME
-DB_PASSWORD
-APP_AUTH_SECRET
-APP_PASSWORD_HASH_ITERATIONS
+常用配置：
+
+| 配置项 | 说明 |
+| :--- | :--- |
+| `DB_URL` | MySQL JDBC 地址 |
+| `DB_USERNAME` / `DB_PASSWORD` | 后端数据库账号密码 |
+| `APP_AUTH_SECRET` | Token 签名密钥 |
+| `APP_PASSWORD_HASH_ITERATIONS` | PBKDF2 迭代次数 |
+| `LLM_ENABLED` | 是否启用模型查询规划 |
+| `LLM_PROVIDER` | 模型提供方标识，当前实现为 `openai-compatible` |
+| `LLM_API_KEY` | 模型 API Key |
+| `LLM_BASE_URL` | OpenAI-compatible API 根地址，例如 `https://api.deepseek.com` 或 `https://api.openai.com/v1` |
+| `LLM_MODEL` | 模型名称 |
+| `LLM_TIMEOUT_MS` | 后端等待单次模型响应的毫秒数 |
+| `LLM_RESPONSE_FORMAT_ENABLED` | 是否发送 `response_format=json_object`，不兼容时保持 `false` |
+| `LLM_REPAIR_ENABLED` | QueryPlan 校验失败时是否允许二次模型修复 |
+| `LLM_SUMMARY_ENABLED` | 是否使用模型生成查询结果摘要 |
+
+自然语言查询默认 `LLM_ENABLED=false`。首次接入模型时建议只开启查询规划：
+
+```env
+LLM_ENABLED=true
+LLM_RESPONSE_FORMAT_ENABLED=false
+LLM_REPAIR_ENABLED=false
+LLM_SUMMARY_ENABLED=false
 ```
+
+这样一次查询默认只调用一次模型，响应更稳定；后续确认模型 JSON 输出稳定后，再按需开启修复和摘要。
 
 ## 前端运行
 
@@ -310,22 +343,29 @@ mvn test
 - 反馈可更新。
 - 缺勤扣分只写入一次。
 - 活动状态、权限和截止时间校验。
+- 智能查询 MockMvc 契约、歧义追问、QueryPlan 字段白名单和分页限制。
 
 最近一次验证结果：
 
 ```text
-Tests run: 25, Failures: 0, Errors: 0
+Tests run: 29, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
-前端构建验证：
+前端类型检查：
 
 ```bash
 cd frontend
-npm.cmd run build
+npx.cmd vue-tsc --noEmit
 ```
 
-最近一次验证结果：构建通过。Vite 对 chunk 体积有提示，但不影响当前构建产物。
+最近一次验证结果：通过。
+
+生产构建仍使用：
+
+```bash
+npm.cmd run build
+```
 
 API smoke test：
 
@@ -394,7 +434,7 @@ docker compose up -d mysql
 
 建议按以下优先级推进：
 
-1. 扩展智能查询模板和同义词识别。
+1. 扩展智能查询 QueryPlan 字段覆盖、同义表达和真实模型样例集。
 2. 报名名单 CSV 导出。
 3. 操作审计日志。
 4. 登录失败限流和生产日志规范。

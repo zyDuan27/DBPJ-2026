@@ -92,7 +92,7 @@ public class QuerySqlBuilder {
         for (QueryFilter filter : plan.getFilters()) {
             String sql = template.filterWhere().get(filter.key());
             if (sql == null) {
-                continue;
+                throw new BusinessException(40002, "查询计划包含不允许的筛选字段：" + filter.key());
             }
             where.add(sql);
             params.put(filter.key(), filter.value());
@@ -258,6 +258,7 @@ public class QuerySqlBuilder {
                 "activityStatus", "a.status = :activityStatus",
                 "categoryKeyword", "cat.category_name LIKE CONCAT('%', :categoryKeyword, '%')",
                 "campusKeyword", "c.campus_name LIKE CONCAT('%', :campusKeyword, '%')",
+                "venueKeyword", "(v.venue_name LIKE CONCAT('%', :venueKeyword, '%') OR v.room_number LIKE CONCAT('%', :venueKeyword, '%'))",
                 "organizerKeyword", "u.username LIKE CONCAT('%', :organizerKeyword, '%')"
         );
     }

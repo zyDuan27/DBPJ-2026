@@ -8,6 +8,10 @@ import com.campus.activity.model.dto.ActivityRequest;
 import com.campus.activity.model.dto.CheckInRequest;
 import com.campus.activity.model.dto.FeedbackRequest;
 import com.campus.activity.model.dto.ReviewRequest;
+import com.campus.activity.model.query.LlmQueryPlanDraft;
+import com.campus.activity.model.query.LlmQueryPlanFilter;
+import com.campus.activity.model.query.QueryIntent;
+import com.campus.activity.model.query.QueryPlanDecision;
 import com.campus.activity.model.vo.CheckInCodeVO;
 import com.campus.activity.model.vo.CheckInResultVO;
 import com.campus.activity.model.vo.RegistrationActionVO;
@@ -15,6 +19,7 @@ import com.campus.activity.service.ActivityService;
 import com.campus.activity.service.AuthService;
 import com.campus.activity.service.CheckInService;
 import com.campus.activity.service.FeedbackService;
+import com.campus.activity.service.QueryPlanValidator;
 import com.campus.activity.service.RegistrationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -83,6 +88,9 @@ class ActivityApplicationTests {
 
     @Autowired
     private FeedbackService feedbackService;
+
+    @Autowired
+    private QueryPlanValidator queryPlanValidator;
 
     @BeforeEach
     void ensureNotificationTable() {
@@ -277,6 +285,65 @@ class ActivityApplicationTests {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(40002));
+    }
+
+    @Test
+    void mockMvcNaturalQueryReturnsClarificationForBroadQuestion() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查一下报名情况","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.clarificationRequired").value(true))
+                .andExpect(jsonPath("$.data.clarificationOptions").isArray())
+                .andExpect(jsonPath("$.data.rows").isArray());
+    }
+
+    @Test
+    void queryPlanValidatorAcceptsSafeLlmPlan() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.setDomain("activity");
+        draft.getFilters().add(filter("activity.status", "eq", "PUBLISHED"));
+        draft.getFilters().add(filter("campus.name", "contains", "邯郸"));
+        draft.getFilters().add(filter("venue.name", "contains", "光华楼"));
+        draft.getFilters().add(filter("startFrom", "gte", LocalDateTime.now().toString()));
+        draft.setSize(100);
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isFalse();
+        assertThat(decision.plan().getIntent()).isEqualTo(QueryIntent.ACTIVITY_LIST);
+        assertThat(decision.plan().getSize()).isEqualTo(50);
+        assertThat(decision.plan().getFilters())
+                .extracting("key")
+                .contains("activityStatus", "campusKeyword", "venueKeyword", "startFrom");
+    }
+
+    @Test
+    void queryPlanValidatorRejectsUnknownLlmField() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.getFilters().add(filter("user.password_hash", "eq", "secret"));
+
+        assertBusinessCode(() -> queryPlanValidator.validate(draft, 1, 20), 40002);
+    }
+
+    @Test
+    void queryPlanValidatorReturnsClarificationForAmbiguity() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setAmbiguity(true);
+        draft.setClarificationOptions(List.of("查询某个活动的报名名单", "查询我的报名记录"));
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isTrue();
+        assertThat(decision.clarificationOptions()).contains("查询我的报名记录");
     }
 
     @Test
@@ -706,6 +773,14 @@ class ActivityApplicationTests {
         assertThatThrownBy(operation::run)
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getCode()).isEqualTo(expectedCode));
+    }
+
+    private LlmQueryPlanFilter filter(String field, String operator, Object value) {
+        LlmQueryPlanFilter filter = new LlmQueryPlanFilter();
+        filter.setField(field);
+        filter.setOperator(operator);
+        filter.setValue(value);
+        return filter;
     }
 
     @FunctionalInterface

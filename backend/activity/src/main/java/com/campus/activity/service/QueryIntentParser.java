@@ -81,6 +81,9 @@ public class QueryIntentParser {
         } else if (text.contains("江湾")) {
             plan.addFilter("campusKeyword", "江湾");
         }
+        if (text.contains("光华楼")) {
+            plan.addFilter("venueKeyword", "光华楼");
+        }
         if (text.contains("计算机协会")) {
             plan.addFilter("organizerKeyword", "计算机协会");
         }

@@ -1,12 +1,16 @@
 package com.campus.activity.service;
 
 import com.campus.activity.common.AuthContext;
+import com.campus.activity.common.BusinessException;
 import com.campus.activity.common.CurrentUser;
 import com.campus.activity.common.Role;
 import com.campus.activity.model.dto.NaturalQueryRequest;
 import com.campus.activity.model.query.QueryExecution;
 import com.campus.activity.model.query.QueryPlan;
+import com.campus.activity.model.query.QueryPlanDecision;
 import com.campus.activity.model.vo.NaturalQueryResultVO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,35 +21,100 @@ import java.util.Map;
 @Service
 @Transactional(readOnly = true)
 public class NaturalQueryService {
+    private static final Logger log = LoggerFactory.getLogger(NaturalQueryService.class);
+
     private final QueryIntentParser queryIntentParser;
+    private final LlmQueryPlanner llmQueryPlanner;
+    private final LlmResultSummarizer llmResultSummarizer;
+    private final QueryPlanValidator queryPlanValidator;
     private final QuerySqlBuilder querySqlBuilder;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     public NaturalQueryService(QueryIntentParser queryIntentParser,
+                               LlmQueryPlanner llmQueryPlanner,
+                               LlmResultSummarizer llmResultSummarizer,
+                               QueryPlanValidator queryPlanValidator,
                                QuerySqlBuilder querySqlBuilder,
                                NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.queryIntentParser = queryIntentParser;
+        this.llmQueryPlanner = llmQueryPlanner;
+        this.llmResultSummarizer = llmResultSummarizer;
+        this.queryPlanValidator = queryPlanValidator;
         this.querySqlBuilder = querySqlBuilder;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     public NaturalQueryResultVO query(NaturalQueryRequest request) {
         CurrentUser user = AuthContext.get();
-        QueryPlan plan = queryIntentParser.parse(request.question(), request.page(), request.size());
+        QueryPlanDecision decision = decidePlan(request, user);
+        if (decision.clarificationRequired()) {
+            return clarificationResult(decision, request);
+        }
+        QueryPlan plan = decision.plan();
         QueryExecution execution = querySqlBuilder.build(plan, user);
         Long total = namedParameterJdbcTemplate.queryForObject(execution.countSql(), execution.params(), Long.class);
         List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(execution.sql(), execution.params());
         long safeTotal = total == null ? 0 : total;
+        String fallbackSummary = summarize(plan, rows, safeTotal);
         return new NaturalQueryResultVO(
-                summarize(plan, rows, safeTotal),
+                llmResultSummarizer.summarize(request.question(), plan, rows, safeTotal, user, fallbackSummary),
                 execution.columns(),
                 rows,
                 user.role() == Role.ADMIN ? execution.sqlPreview() : null,
+                user.role() == Role.ADMIN ? decision.planPreview() : null,
+                false,
+                List.of(),
                 plan.getIntent().name(),
                 plan.getPage(),
                 plan.getSize(),
                 safeTotal
         );
+    }
+
+    private QueryPlanDecision decidePlan(NaturalQueryRequest request, CurrentUser user) {
+        if (isAmbiguousRegistrationQuestion(request.question())) {
+            return QueryPlanDecision.clarification(
+                    List.of("查询某个活动的报名名单", "查询候补人数最多的活动", "查询我的报名记录"),
+                    Map.of("planner", "clarification", "reason", "报名查询缺少活动、范围或主体")
+            );
+        }
+        if (llmQueryPlanner.isEnabled()) {
+            try {
+                return llmQueryPlanner.plan(request.question(), request.page(), request.size(), user);
+            } catch (BusinessException ex) {
+                log.warn("LLM query planning failed, fallback to rule parser: {}", ex.getMessage());
+            } catch (RuntimeException ignored) {
+                log.warn("LLM query planning failed, fallback to rule parser: {}", ignored.getMessage());
+                // Keep the query feature usable when the model endpoint is unavailable.
+            }
+        }
+        QueryPlan plan = queryIntentParser.parse(request.question(), request.page(), request.size());
+        return QueryPlanDecision.executable(plan, queryPlanValidator.planPreview(plan, null));
+    }
+
+    private NaturalQueryResultVO clarificationResult(QueryPlanDecision decision, NaturalQueryRequest request) {
+        return new NaturalQueryResultVO(
+                "这个问题还不够具体，请选择一个查询方向后继续。",
+                List.of(),
+                List.of(),
+                null,
+                decision.planPreview(),
+                true,
+                decision.clarificationOptions(),
+                null,
+                request.page() == null ? 1 : request.page(),
+                request.size() == null ? 20 : Math.min(Math.max(request.size(), 1), 50),
+                0
+        );
+    }
+
+    private boolean isAmbiguousRegistrationQuestion(String question) {
+        if (question == null) {
+            return false;
+        }
+        String text = question.trim().replaceAll("\\s+", "");
+        return text.matches(".*(报名情况|报名信息|报名数据).*")
+                && !text.matches(".*(我的|某个|活动|候补|取消|已取消|名单|本月|今天|明天|昨天).*");
     }
 
     private String summarize(QueryPlan plan, List<Map<String, Object>> rows, long total) {
