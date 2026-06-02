@@ -6,7 +6,7 @@
 
 当前版本已经具备较完整的演示闭环：后端采用 Spring Boot + MyBatis-Plus，前端采用 Vue 3 + Vite + Element Plus，数据库脚本包含建表、约束、索引、触发器和初始化测试数据。
 
-当前版本已加入智能查询一期增强：支持 OpenAI-compatible 模型将自然语言转换为受控 QueryPlan，再由后端白名单 SQL 编译器执行只读查询。未启用模型或模型调用失败时，会自动降级到规则解析。
+当前版本已加入智能查询三期增强：支持 OpenAI-compatible 模型将自然语言转换为受控逻辑视图 SQL 草稿，再由后端校验、权限注入并编译为只读查询。普通用户不能直接访问真实表；管理员可使用更自由的只读 SQL 草稿模式。
 
 ## 功能概览
 
@@ -47,11 +47,11 @@
 
 - 学生、组织者、管理员均可进入智能查询页面。
 - 支持活动、报名、签到、缺勤、反馈、信用、通知等业务查询。
-- 模型只生成 QueryPlan JSON，不直接执行模型生成的 SQL。
-- SQL 构建强制使用后端白名单字段、筛选条件、JOIN 和分页。
+- 模型优先生成 `CONTROLLED_SQL` JSON，SQL 只能引用后端声明的逻辑视图和字段。
+- 后端强制校验只读 SELECT、逻辑视图白名单、字段白名单、角色权限和分页上限。
 - 支持模糊场地查询，例如“查询在光华楼的活动”。
 - 支持活动标题、学生姓名/学号和信用分阈值等自然槽位，例如“查询某活动的报名名单”“查询信用分低于80的学生”。
-- 管理员可查看 QueryPlan 预览和 SQL 预览；普通用户隐藏 SQL 细节。
+- 管理员可查看 QueryPlan/SQL 预览，并可使用 `ADMIN_SQL` 只读草稿模式；普通用户隐藏 SQL 细节。
 - 过宽或含糊的问题会返回追问选项。
 
 ## 技术栈
@@ -221,11 +221,17 @@ http://localhost:8080
 | `LLM_RESPONSE_FORMAT_ENABLED` | 是否发送 `response_format=json_object`，不兼容时保持 `false` |
 | `LLM_REPAIR_ENABLED` | QueryPlan 校验失败时是否允许二次模型修复 |
 | `LLM_SUMMARY_ENABLED` | 是否使用模型生成查询结果摘要 |
+| `LLM_SQL_MODE` | SQL 草稿模式，当前推荐 `CONTROLLED_ALL` |
+| `LLM_ADMIN_SQL_ENABLED` | 是否允许管理员使用真实业务表 SQL 草稿 |
+| `LLM_CONTROLLED_SQL_ENABLED` | 是否启用全角色受控逻辑视图 SQL 草稿 |
 
-自然语言查询默认 `LLM_ENABLED=false`。首次接入模型时建议只开启查询规划：
+自然语言查询默认 `LLM_ENABLED=false`。首次接入模型时建议启用受控逻辑视图 SQL：
 
 ```env
 LLM_ENABLED=true
+LLM_SQL_MODE=CONTROLLED_ALL
+LLM_CONTROLLED_SQL_ENABLED=true
+LLM_ADMIN_SQL_ENABLED=true
 LLM_RESPONSE_FORMAT_ENABLED=false
 LLM_REPAIR_ENABLED=false
 LLM_SUMMARY_ENABLED=false
@@ -363,7 +369,7 @@ mvn test
 - 反馈可更新。
 - 缺勤扣分只写入一次。
 - 活动状态、权限和截止时间校验。
-- 智能查询 MockMvc 契约、歧义追问、QueryPlan 字段白名单、自然槽位和分页限制。
+- 智能查询 MockMvc 契约、歧义追问、受控逻辑视图 SQL、QueryPlan 字段白名单、自然槽位和分页限制。
 
 最近一次验证结果：
 
@@ -461,7 +467,7 @@ docker compose up -d mysql
 
 建议按以下优先级推进：
 
-1. 扩展智能查询 QueryPlan 字段覆盖、同义表达和真实模型样例集。
+1. 扩展智能查询逻辑视图字段覆盖、同义表达和真实模型样例集。
 2. 报名名单 CSV 导出。
 3. 操作审计日志。
 4. 登录失败限流和生产日志规范。

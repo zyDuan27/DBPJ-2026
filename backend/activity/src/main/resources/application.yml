@@ -32,6 +32,6 @@ llm:
   response-format-enabled: ${LLM_RESPONSE_FORMAT_ENABLED:false}
   repair-enabled: ${LLM_REPAIR_ENABLED:false}
   summary-enabled: ${LLM_SUMMARY_ENABLED:false}
-  sql-mode: ${LLM_SQL_MODE:ADMIN_ONLY}
+  sql-mode: ${LLM_SQL_MODE:CONTROLLED_ALL}
   admin-sql-enabled: ${LLM_ADMIN_SQL_ENABLED:true}
   controlled-sql-enabled: ${LLM_CONTROLLED_SQL_ENABLED:true}
