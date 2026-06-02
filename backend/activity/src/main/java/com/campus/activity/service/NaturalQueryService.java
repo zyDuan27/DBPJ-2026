@@ -5,6 +5,7 @@ import com.campus.activity.common.BusinessException;
 import com.campus.activity.common.CurrentUser;
 import com.campus.activity.common.Role;
 import com.campus.activity.model.dto.NaturalQueryRequest;
+import com.campus.activity.model.query.ControlledSqlExecution;
 import com.campus.activity.model.query.QueryExecution;
 import com.campus.activity.model.query.QueryMode;
 import com.campus.activity.model.query.QueryPlan;
@@ -31,6 +32,7 @@ public class NaturalQueryService {
     private final QueryPlanValidator queryPlanValidator;
     private final QuerySqlBuilder querySqlBuilder;
     private final AdminSqlValidator adminSqlValidator;
+    private final ControlledSqlCompiler controlledSqlCompiler;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     public NaturalQueryService(QueryIntentParser queryIntentParser,
@@ -39,6 +41,7 @@ public class NaturalQueryService {
                                QueryPlanValidator queryPlanValidator,
                                QuerySqlBuilder querySqlBuilder,
                                AdminSqlValidator adminSqlValidator,
+                               ControlledSqlCompiler controlledSqlCompiler,
                                NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.queryIntentParser = queryIntentParser;
         this.llmQueryPlanner = llmQueryPlanner;
@@ -46,6 +49,7 @@ public class NaturalQueryService {
         this.queryPlanValidator = queryPlanValidator;
         this.querySqlBuilder = querySqlBuilder;
         this.adminSqlValidator = adminSqlValidator;
+        this.controlledSqlCompiler = controlledSqlCompiler;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
@@ -59,11 +63,23 @@ public class NaturalQueryService {
             try {
                 return adminSqlResult(decision, request, user);
             } catch (BusinessException ex) {
-                log.warn("Admin SQL draft rejected, fallback to rule parser: {}", ex.getMessage());
+                log.warn("Admin SQL draft rejected, try controlled SQL fallback: {}", ex.getMessage());
+                try {
+                    return controlledSqlResult(
+                            QueryPlanDecision.controlledSql(decision.adminSql(), decision.summaryHint(), decision.planPreview()),
+                            request,
+                            user
+                    );
+                } catch (BusinessException controlledEx) {
+                    log.warn("Controlled SQL fallback rejected, fallback to rule parser: {}", controlledEx.getMessage());
+                }
                 QueryPlan fallbackPlan = queryIntentParser.parse(request.question(), request.page(), request.size());
                 fallbackPlan.setPlanner("rules");
                 decision = QueryPlanDecision.executable(fallbackPlan, queryPlanValidator.planPreview(fallbackPlan, null));
             }
+        }
+        if (decision.queryMode() == QueryMode.CONTROLLED_SQL) {
+            return controlledSqlResult(decision, request, user);
         }
         QueryPlan plan = decision.plan();
         QueryExecution execution = querySqlBuilder.build(plan, user);
@@ -142,6 +158,30 @@ public class NaturalQueryService {
                 "ADMIN_SQL",
                 request.page() == null ? 1 : request.page(),
                 request.size() == null ? 20 : Math.min(Math.max(request.size(), 1), 50),
+                rows.size()
+        );
+    }
+
+    private NaturalQueryResultVO controlledSqlResult(QueryPlanDecision decision, NaturalQueryRequest request, CurrentUser user) {
+        ControlledSqlExecution execution = controlledSqlCompiler.compile(decision.adminSql(), user);
+        List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(execution.sql(), execution.params());
+        List<QueryColumnVO> columns = deriveColumns(rows);
+        String summary = decision.summaryHint() == null || decision.summaryHint().isBlank()
+                ? "受控 SQL 查询返回 " + rows.size() + " 条结果。"
+                : decision.summaryHint();
+        int safePage = request.page() == null ? 1 : request.page();
+        int safeSize = request.size() == null ? 20 : Math.min(Math.max(request.size(), 1), 50);
+        return new NaturalQueryResultVO(
+                summary,
+                columns,
+                rows,
+                user.role() == Role.ADMIN ? execution.sqlPreview() : null,
+                user.role() == Role.ADMIN ? decision.planPreview() : null,
+                false,
+                List.of(),
+                "CONTROLLED_SQL",
+                safePage,
+                safeSize,
                 rows.size()
         );
     }

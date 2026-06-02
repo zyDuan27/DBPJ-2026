@@ -22,6 +22,10 @@ public record QueryPlanDecision(QueryPlan plan,
         return new QueryPlanDecision(null, false, List.of(), withMode(planPreview, QueryMode.ADMIN_SQL), QueryMode.ADMIN_SQL, sql, summaryHint);
     }
 
+    public static QueryPlanDecision controlledSql(String sql, String summaryHint, Map<String, Object> planPreview) {
+        return new QueryPlanDecision(null, false, List.of(), withMode(planPreview, QueryMode.CONTROLLED_SQL), QueryMode.CONTROLLED_SQL, sql, summaryHint);
+    }
+
     private static Map<String, Object> withMode(Map<String, Object> preview, QueryMode mode) {
         if (preview == null) {
             return Map.of("queryMode", mode.name());

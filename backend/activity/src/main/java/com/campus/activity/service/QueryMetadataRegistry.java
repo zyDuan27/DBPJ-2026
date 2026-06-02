@@ -17,7 +17,7 @@ public class QueryMetadataRegistry {
             "activityfeedback", "creditrecord", "notification"
     );
     private final Set<String> sensitiveTokens = Set.of(
-            "password", "token", "secret", "hash", "credential", "api_key", "apikey"
+            "password", "token", "secret", "hash", "credential", "api_key", "apikey", "phone"
     );
 
     public QueryMetadataRegistry() {

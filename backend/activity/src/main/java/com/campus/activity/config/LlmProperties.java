@@ -15,6 +15,7 @@ public class LlmProperties {
     private boolean summaryEnabled = false;
     private String sqlMode = "ADMIN_ONLY";
     private boolean adminSqlEnabled = true;
+    private boolean controlledSqlEnabled = true;
 
     public boolean isEnabled() {
         return enabled;
@@ -102,6 +103,14 @@ public class LlmProperties {
 
     public void setAdminSqlEnabled(boolean adminSqlEnabled) {
         this.adminSqlEnabled = adminSqlEnabled;
+    }
+
+    public boolean isControlledSqlEnabled() {
+        return controlledSqlEnabled;
+    }
+
+    public void setControlledSqlEnabled(boolean controlledSqlEnabled) {
+        this.controlledSqlEnabled = controlledSqlEnabled;
     }
 
     public boolean isReady() {

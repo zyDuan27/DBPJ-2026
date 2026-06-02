@@ -34,3 +34,4 @@ llm:
   summary-enabled: ${LLM_SUMMARY_ENABLED:false}
   sql-mode: ${LLM_SQL_MODE:ADMIN_ONLY}
   admin-sql-enabled: ${LLM_ADMIN_SQL_ENABLED:true}
+  controlled-sql-enabled: ${LLM_CONTROLLED_SQL_ENABLED:true}

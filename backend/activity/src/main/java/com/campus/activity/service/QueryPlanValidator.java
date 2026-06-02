@@ -160,6 +160,13 @@ public class QueryPlanValidator {
         return preview;
     }
 
+    public Map<String, Object> controlledSqlPreview(LlmQueryPlanDraft draft) {
+        Map<String, Object> preview = preview(draft);
+        preview.put("queryMode", "CONTROLLED_SQL");
+        preview.put("summaryHint", draft.getSummaryHint());
+        return preview;
+    }
+
     private QueryIntent normalizeIntent(QueryIntent intent, LlmQueryPlanDraft draft, List<QueryFilter> filters) {
         if ("campus".equalsIgnoreCase(draft.getDomain())
                 && (intent == QueryIntent.ACTIVITY_LIST || intent == QueryIntent.CAMPUS_WITHOUT_ACTIVITY)
