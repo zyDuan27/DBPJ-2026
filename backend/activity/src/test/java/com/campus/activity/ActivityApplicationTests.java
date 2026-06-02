@@ -500,6 +500,23 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void queryPlanValidatorNormalizesImperfectLlmRegistrationPlan() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.setDomain("activity");
+        draft.getFilters().add(filter("campus.name", "contains", "邯郸"));
+        draft.getFilters().add(filter("registration.status", "eq", "ENROLLED"));
+        draft.getFilters().add(filter("feedback.exists", "true", true));
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isFalse();
+        assertThat(decision.plan().getIntent()).isEqualTo(QueryIntent.MY_REGISTRATION_LIST);
+        assertThat(decision.plan().getFilters()).anyMatch(filter -> "registrationStatus".equals(filter.key()) && "ENROLLED".equals(filter.value()));
+        assertThat(decision.plan().getFilters()).anyMatch(filter -> "evaluatedOnly".equals(filter.key()) && Boolean.TRUE.equals(filter.value()));
+    }
+
+    @Test
     void queryPlanValidatorRejectsUnknownLlmField() {
         LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
         draft.setIntent("ACTIVITY_LIST");

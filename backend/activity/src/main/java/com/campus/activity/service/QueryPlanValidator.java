@@ -77,6 +77,10 @@ public class QueryPlanValidator {
             );
         }
         QueryIntent intent = parseIntent(draft.getIntent());
+        List<QueryFilter> safeFilters = draft.getFilters().stream()
+                .map(this::validateFilter)
+                .toList();
+        intent = normalizeIntent(intent, safeFilters);
         QueryPlan plan = new QueryPlan(intent, sanitizePage(firstNonNull(draft.getPage(), requestPage)),
                 sanitizeSize(firstNonNull(draft.getSize(), requestSize)));
         plan.setPlanner("llm");
@@ -92,8 +96,7 @@ public class QueryPlanValidator {
         for (String order : draft.getOrderBy()) {
             plan.addOrderBy(order);
         }
-        for (LlmQueryPlanFilter filter : draft.getFilters()) {
-            QueryFilter safeFilter = validateFilter(filter);
+        for (QueryFilter safeFilter : safeFilters) {
             plan.addFilter(safeFilter.key(), safeFilter.value());
         }
         enforceIntentDefaults(plan);
@@ -126,11 +129,35 @@ public class QueryPlanValidator {
         if (!ALLOWED_FILTERS.contains(key)) {
             throw new BusinessException(40002, "查询计划包含未知筛选字段：" + filter.getField());
         }
-        String operator = filter.getOperator() == null ? "eq" : filter.getOperator().toLowerCase(Locale.ROOT);
+        String operator = normalizeOperator(key, filter);
         if (!ALLOWED_OPERATORS.contains(operator)) {
             throw new BusinessException(40002, "查询计划包含非法筛选操作符：" + operator);
         }
         return new QueryFilter(key, normalizeValue(key, filter.getValue()));
+    }
+
+    private QueryIntent normalizeIntent(QueryIntent intent, List<QueryFilter> filters) {
+        if (intent == QueryIntent.ACTIVITY_LIST
+                && filters.stream().anyMatch(filter -> "registrationStatus".equals(filter.key()) || "evaluatedOnly".equals(filter.key()))) {
+            return QueryIntent.MY_REGISTRATION_LIST;
+        }
+        return intent;
+    }
+
+    private String normalizeOperator(String key, LlmQueryPlanFilter filter) {
+        String operator = filter.getOperator() == null ? "eq" : filter.getOperator().toLowerCase(Locale.ROOT).trim();
+        if (("unreadOnly".equals(key) || "evaluatedOnly".equals(key)) && ("true".equals(operator) || "false".equals(operator))) {
+            return "eq";
+        }
+        return switch (operator) {
+            case "=", "equals" -> "eq";
+            case "like" -> "contains";
+            case ">=" -> "gte";
+            case ">" -> "gt";
+            case "<=" -> "lte";
+            case "<" -> "lt";
+            default -> operator;
+        };
     }
 
     private Object normalizeValue(String key, Object value) {
