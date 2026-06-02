@@ -44,7 +44,7 @@ public class NaturalQueryPromptBuilder {
                 }
 
                 allowed filter fields:
-                startFrom, startTo, activityKeyword, activityStatus, categoryKeyword, campusKeyword, venueKeyword,
+                startFrom, startTo, activityKeyword, activityStatus, activityStatusSet, categoryKeyword, campusKeyword, venueKeyword,
                 organizerKeyword, studentKeyword, registrationStatus, maxRating, maxCreditScore, unreadOnly,
                 notificationType, evaluatedOnly.
                 semantic aliases you may use:
@@ -52,6 +52,7 @@ public class NaturalQueryPromptBuilder {
                 student.name, student.no, registration.status, registration.evaluated, feedback.exists,
                 feedback.rating, credit.score, notification.type.
                 activityKeyword 表示活动语义关键词，可用于标题、简介、分类、组织者等活动相关文本，不限于精确标题。
+                多个活动状态必须使用 activityStatusSet，value 为状态数组；不要把多个状态塞进 activityStatus。
 
                 Examples:
                 问：有活动未举办的校区
@@ -64,6 +65,8 @@ public class NaturalQueryPromptBuilder {
                 答：{"queryMode":"DSL","intent":"MY_FEEDBACK_LIST","domain":"feedback","selectFields":["activity.title","feedback.rating","feedback.content"],"filters":[],"exists":[],"notExists":[],"distinct":false,"metrics":[],"groupBy":[],"orderBy":["feedback.updatedAt desc"],"page":1,"size":20,"ambiguity":false,"clarificationOptions":[]}
                 问：查询一个和数据库相关的活动
                 答：{"queryMode":"DSL","intent":"ACTIVITY_LIST","domain":"activity","selectFields":["activity.title","activity.startTime","campus.name"],"filters":[{"field":"activityKeyword","operator":"contains","value":"数据库"}],"exists":[],"notExists":[],"distinct":false,"metrics":[],"groupBy":[],"orderBy":["activity.startTime desc"],"page":1,"size":20,"ambiguity":false,"clarificationOptions":[]}
+                问：查询全部活动，包括取消和过期的
+                答：{"queryMode":"DSL","intent":"ACTIVITY_LIST","domain":"activity","selectFields":["activity.title","activity.status","activity.startTime"],"filters":[{"field":"activity.statuses","operator":"eq","value":["PUBLISHED","ONGOING","FINISHED","CANCELLED"]}],"exists":[],"notExists":[],"distinct":false,"metrics":[],"groupBy":[],"orderBy":["activity.startTime desc"],"page":1,"size":20,"ambiguity":false,"clarificationOptions":[]}
 
                 allowed statuses:
                 activityStatus = DRAFT, PENDING_REVIEW, REJECTED, PUBLISHED, ONGOING, FINISHED, CANCELLED;

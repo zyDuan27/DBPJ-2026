@@ -23,7 +23,7 @@ public class QueryPlanValidator {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
     private static final Set<String> ALLOWED_FILTERS = Set.of(
-            "startFrom", "startTo", "activityKeyword", "activityStatus", "categoryKeyword", "campusKeyword",
+            "startFrom", "startTo", "activityKeyword", "activityStatus", "activityStatusSet", "categoryKeyword", "campusKeyword",
             "venueKeyword", "organizerKeyword", "studentKeyword", "registrationStatus", "maxRating",
             "maxCreditScore", "unreadOnly", "notificationType", "evaluatedOnly"
     );
@@ -47,6 +47,7 @@ public class QueryPlanValidator {
             Map.entry("activity.title", "activityKeyword"),
             Map.entry("activity.name", "activityKeyword"),
             Map.entry("activity.status", "activityStatus"),
+            Map.entry("activity.statuses", "activityStatusSet"),
             Map.entry("activity.category", "categoryKeyword"),
             Map.entry("category.name", "categoryKeyword"),
             Map.entry("activity.campus", "campusKeyword"),
@@ -203,6 +204,7 @@ public class QueryPlanValidator {
         return switch (key) {
             case "startFrom", "startTo" -> parseDateTime(value);
             case "activityStatus" -> enumValue(value, ACTIVITY_STATUSES, "活动状态");
+            case "activityStatusSet" -> enumValues(value, ACTIVITY_STATUSES, "活动状态");
             case "registrationStatus" -> enumValue(value, REGISTRATION_STATUSES, "报名状态");
             case "notificationType" -> enumValue(value, NOTIFICATION_TYPES, "通知类型");
             case "maxRating" -> parseInteger(value, 1, 5, "评分上限");
@@ -299,6 +301,24 @@ public class QueryPlanValidator {
             throw new BusinessException(40002, "查询计划包含非法" + label + "：" + value);
         }
         return text;
+    }
+
+    private List<String> enumValues(Object value, Set<String> allowed, String label) {
+        List<?> rawValues = value instanceof List<?> list ? list : List.of(value.toString().split(","));
+        List<String> normalized = rawValues.stream()
+                .map(item -> item.toString().trim().toUpperCase(Locale.ROOT))
+                .filter(item -> !item.isBlank())
+                .distinct()
+                .toList();
+        if (normalized.isEmpty()) {
+            throw new BusinessException(40002, label + "不能为空");
+        }
+        for (String item : normalized) {
+            if (!allowed.contains(item)) {
+                throw new BusinessException(40002, "查询计划包含非法" + label + "：" + item);
+            }
+        }
+        return normalized;
     }
 
     private Integer parseInteger(Object value, int min, int max, String label) {

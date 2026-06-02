@@ -54,7 +54,7 @@ public class QuerySqlBuilder {
         }
         if (user.role() == Role.STUDENT) {
             switch (intent) {
-                case ACTIVITY_LIST -> where.add("a.status IN ('PUBLISHED', 'ONGOING', 'FINISHED')");
+                case ACTIVITY_LIST -> where.add("a.status IN ('PUBLISHED', 'ONGOING', 'FINISHED', 'CANCELLED')");
                 case CAMPUS_WITHOUT_ACTIVITY -> {
                 }
                 case MY_REGISTRATION_LIST -> {
@@ -370,6 +370,7 @@ public class QuerySqlBuilder {
                 "startTo", "a.start_time < :startTo",
                 "activityKeyword", "(a.title LIKE CONCAT('%', :activityKeyword, '%') OR a.description LIKE CONCAT('%', :activityKeyword, '%') OR cat.category_name LIKE CONCAT('%', :activityKeyword, '%') OR " + organizerAlias + ".username LIKE CONCAT('%', :activityKeyword, '%'))",
                 "activityStatus", "a.status = :activityStatus",
+                "activityStatusSet", "a.status IN (:activityStatusSet)",
                 "categoryKeyword", "cat.category_name LIKE CONCAT('%', :categoryKeyword, '%')",
                 "campusKeyword", "c.campus_name LIKE CONCAT('%', :campusKeyword, '%')",
                 "venueKeyword", "(v.venue_name LIKE CONCAT('%', :venueKeyword, '%') OR v.room_number LIKE CONCAT('%', :venueKeyword, '%'))",

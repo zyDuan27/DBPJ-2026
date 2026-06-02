@@ -98,13 +98,27 @@ public class NaturalQueryService {
                 return llmQueryPlanner.plan(request.question(), request.page(), request.size(), user);
             } catch (BusinessException ex) {
                 log.warn("LLM query planning failed, fallback to rule parser: {}", ex.getMessage());
+                if (requiresReliableLlmPlanning(request.question())) {
+                    throw new BusinessException(40002, "模型解析失败，已避免使用规则兜底返回不准确结果：" + ex.getMessage());
+                }
             } catch (RuntimeException ignored) {
                 log.warn("LLM query planning failed, fallback to rule parser: {}", ignored.getMessage());
+                if (requiresReliableLlmPlanning(request.question())) {
+                    throw new BusinessException(40002, "模型解析失败，已避免使用规则兜底返回不准确结果：" + ignored.getMessage());
+                }
                 // Keep the query feature usable when the model endpoint is unavailable.
             }
         }
         QueryPlan plan = queryIntentParser.parse(request.question(), request.page(), request.size());
         return QueryPlanDecision.executable(plan, queryPlanValidator.planPreview(plan, null));
+    }
+
+    private boolean requiresReliableLlmPlanning(String question) {
+        if (question == null) {
+            return false;
+        }
+        String text = question.trim().replaceAll("\\s+", "");
+        return text.matches(".*(全部|所有|包括|相关|有关|关于|取消|过期|历史|评价记录|参与过|未举办).*");
     }
 
     private NaturalQueryResultVO adminSqlResult(QueryPlanDecision decision, NaturalQueryRequest request, CurrentUser user) {

@@ -518,6 +518,48 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void mockMvcNaturalQueryCanIncludeCancelledAndExpiredActivities() throws Exception {
+        TestFixture cancelledFixture = createFixture(LocalDateTime.now().minusDays(5), LocalDateTime.now().minusDays(5).plusHours(2), 5);
+        TestFixture finishedFixture = createFixture(LocalDateTime.now().minusDays(3), LocalDateTime.now().minusDays(3).plusHours(2), 5);
+        String cancelledTitle = "cancelled-activity-" + System.nanoTime();
+        String finishedTitle = "finished-activity-" + System.nanoTime();
+        jdbcTemplate.update("""
+                UPDATE Activity
+                SET title = ?, status = 'CANCELLED'
+                WHERE activity_id = ?
+                """, cancelledTitle, cancelledFixture.activityId());
+        jdbcTemplate.update("""
+                UPDATE Activity
+                SET title = ?, status = 'FINISHED'
+                WHERE activity_id = ?
+                """, finishedTitle, finishedFixture.activityId());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(cancelledFixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询全部活动，包括取消和过期的","page":1,"size":20}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_LIST"))
+                .andExpect(jsonPath("$.data.rows[*].activityTitle", hasItem(cancelledTitle)))
+                .andExpect(jsonPath("$.data.rows[*].activityTitle", hasItem(finishedTitle)));
+    }
+
+    @Test
+    void queryIntentParserExtractsActivityStatusSetForAllClosedActivityQuery() {
+        QueryPlan plan = queryIntentParser.parse("查询全部活动，包括取消和过期的", 1, 20);
+
+        assertThat(plan.getIntent()).isEqualTo(QueryIntent.ACTIVITY_LIST);
+        assertThat(plan.getFilters())
+                .anyMatch(filter -> "activityStatusSet".equals(filter.key())
+                        && filter.value() instanceof List<?> values
+                        && values.contains("CANCELLED")
+                        && values.contains("FINISHED"));
+    }
+
+    @Test
     void mockMvcNaturalQueryReturnsCampusDomainForCampusWithoutActivities() throws Exception {
         int studentId = insertUser("STUDENT", "campus-query-student", "CAMPUS" + Long.toString(System.nanoTime()).substring(0, 8), uniquePhone("190"));
         String campusName = "no-activity-campus-" + System.nanoTime();
@@ -632,6 +674,23 @@ class ActivityApplicationTests {
         assertThat(decision.plan().getFilters())
                 .extracting("key")
                 .contains("maxCreditScore", "studentKeyword");
+    }
+
+    @Test
+    void queryPlanValidatorAcceptsActivityStatusSet() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.setDomain("activity");
+        draft.getFilters().add(filter("activity.statuses", "eq", List.of("PUBLISHED", "ONGOING", "FINISHED", "CANCELLED")));
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isFalse();
+        assertThat(decision.plan().getFilters())
+                .anyMatch(filter -> "activityStatusSet".equals(filter.key())
+                        && filter.value() instanceof List<?> values
+                        && values.contains("CANCELLED")
+                        && values.contains("FINISHED"));
     }
 
     @Test

@@ -91,6 +91,11 @@ public class QueryIntentParser {
         } else if (text.contains("已发布") || text.contains("发布")) {
             plan.addFilter("activityStatus", "PUBLISHED");
         }
+        if (plan.getIntent() == QueryIntent.ACTIVITY_LIST
+                && containsAny(text, "全部活动", "所有活动")
+                && containsAny(text, "取消", "已取消", "过期", "结束", "历史")) {
+            plan.addFilter("activityStatusSet", List.of("PUBLISHED", "ONGOING", "FINISHED", "CANCELLED"));
+        }
         if (text.contains("志愿")) {
             plan.addFilter("categoryKeyword", "志愿");
         }
@@ -204,7 +209,8 @@ public class QueryIntentParser {
         }
         return !containsAny(keyword,
                 "今天", "明天", "昨天", "本月", "待审核", "已发布", "发布",
-                "报名", "名单", "签到", "缺勤", "通知", "校区", "场地");
+                "报名", "名单", "签到", "缺勤", "通知", "校区", "场地",
+                "全部", "所有", "取消", "过期", "历史", "结束", "包括");
     }
 
     private void applyStudentKeywordSlot(QueryPlan plan, String text) {
