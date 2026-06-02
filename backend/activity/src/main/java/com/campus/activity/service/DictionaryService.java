@@ -42,7 +42,8 @@ public class DictionaryService {
     }
 
     public List<VenueVO> venues(Integer campusId, String keyword) {
-        String like = "%" + (keyword == null ? "" : keyword) + "%";
+        String normalized = keyword == null ? "" : keyword.trim();
+        String like = normalized.isBlank() ? null : "%" + normalized + "%";
         return venueMapper.listVenues(campusId, like).stream().map(VenueVO::from).toList();
     }
 

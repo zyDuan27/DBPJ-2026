@@ -142,9 +142,6 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
             <script>
             SELECT COUNT(*)
             FROM Registration r
-            JOIN Activity a ON r.activity_id = a.activity_id
-            JOIN Venue v ON a.venue_id = v.venue_id
-            JOIN Campus c ON v.campus_id = c.campus_id
             WHERE r.student_id = #{studentId}
             <if test="status != null and status != ''">AND r.status = #{status}</if>
             </script>
@@ -176,7 +173,6 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
             <script>
             SELECT COUNT(*)
             FROM Registration r
-            JOIN User u ON r.student_id = u.user_id
             WHERE r.activity_id = #{activityId}
             <if test="status != null and status != ''">AND r.status = #{status}</if>
             </script>
@@ -188,7 +184,7 @@ public interface RegistrationMapper extends BaseMapper<Registration> {
             SELECT r.registration_id AS registrationId, u.username AS studentName, u.student_no AS studentNo,
                    u.phone, r.status AS registrationStatus, r.queue_no AS queueNo,
                    r.registration_time AS registrationTime, r.check_in_time AS checkInTime
-            FROM Registration r
+            FROM Registration r FORCE INDEX (idx_registration_activity_status_queue_time)
             JOIN User u ON r.student_id = u.user_id
             WHERE r.activity_id = #{activityId}
             <if test="status != null and status != ''">AND r.status = #{status}</if>

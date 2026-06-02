@@ -133,7 +133,7 @@ public class QuerySqlBuilder {
                 JOIN User u ON a.organizer_id = u.user_id
                 """,
                 List.of(),
-                commonActivityFilters(),
+                commonActivityFilters("u"),
                 "",
                 "a.start_time DESC, a.activity_id DESC"
         ));
@@ -152,7 +152,7 @@ public class QuerySqlBuilder {
                 LEFT JOIN Registration r ON a.activity_id = r.activity_id AND r.status = 'WAITLISTED'
                 """,
                 List.of(),
-                commonActivityFilters(),
+                commonActivityFilters("u"),
                 "a.activity_id, a.title, u.username",
                 "waitlistedCount DESC, a.activity_id DESC"
         ));
@@ -162,13 +162,20 @@ public class QuerySqlBuilder {
                         col("content", "反馈内容", "string"), col("updatedAt", "更新时间", "datetime")),
                 """
                 SELECT f.feedback_id AS feedbackId, a.title AS activityTitle,
-                       u.username AS studentName, f.rating, f.content, f.updated_at AS updatedAt
+                       su.username AS studentName, f.rating, f.content, f.updated_at AS updatedAt
                 FROM ActivityFeedback f
                 JOIN Activity a ON f.activity_id = a.activity_id
-                JOIN User u ON f.student_id = u.user_id
+                JOIN User su ON f.student_id = su.user_id
+                JOIN Venue v ON a.venue_id = v.venue_id
+                JOIN Campus c ON v.campus_id = c.campus_id
+                JOIN Category cat ON a.category_id = cat.category_id
+                JOIN User ou ON a.organizer_id = ou.user_id
                 """,
                 List.of(),
-                merge(commonActivityFilters(), Map.of("maxRating", "f.rating <= :maxRating")),
+                merge(commonActivityFilters("ou"), Map.of(
+                        "maxRating", "f.rating <= :maxRating",
+                        "studentKeyword", "(su.username LIKE CONCAT('%', :studentKeyword, '%') OR su.student_no LIKE CONCAT('%', :studentKeyword, '%'))"
+                )),
                 "",
                 "f.rating ASC, f.updated_at DESC"
         ));
@@ -176,28 +183,44 @@ public class QuerySqlBuilder {
                 List.of(col("studentId", "学生ID", "number"), col("studentName", "学生", "string"),
                         col("studentNo", "学号", "string"), col("creditScore", "信用分", "number")),
                 """
-                SELECT u.user_id AS studentId, u.username AS studentName, u.student_no AS studentNo,
-                       100 + COALESCE(SUM(cr.change_value), 0) AS creditScore
-                FROM User u
-                LEFT JOIN CreditRecord cr ON u.user_id = cr.student_id
+                SELECT credit.studentId, credit.studentName, credit.studentNo, credit.creditScore
+                FROM (
+                    SELECT u.user_id AS studentId, u.username AS studentName, u.student_no AS studentNo,
+                           100 + COALESCE(SUM(cr.change_value), 0) AS creditScore
+                    FROM User u
+                    LEFT JOIN CreditRecord cr ON u.user_id = cr.student_id
+                    WHERE u.role = 'STUDENT'
+                    GROUP BY u.user_id, u.username, u.student_no
+                ) credit
                 """,
-                List.of("u.role = 'STUDENT'"),
-                Map.of(),
-                "u.user_id, u.username, u.student_no",
-                "creditScore ASC, u.user_id ASC"
+                List.of(),
+                Map.of(
+                        "studentKeyword", "(credit.studentName LIKE CONCAT('%', :studentKeyword, '%') OR credit.studentNo LIKE CONCAT('%', :studentKeyword, '%'))",
+                        "maxCreditScore", "credit.creditScore <= :maxCreditScore"
+                ),
+                "",
+                "credit.creditScore ASC, credit.studentId ASC"
         ));
         templates.put(QueryIntent.CREDIT_RECORDS, new QueryTemplate(
-                List.of(col("recordId", "流水ID", "number"), col("activityTitle", "活动", "string"),
+                List.of(col("recordId", "流水ID", "number"), col("studentName", "学生", "string"),
+                        col("activityTitle", "活动", "string"),
                         col("changeValue", "变化值", "number"), col("reasonType", "原因类型", "string"),
                         col("reason", "说明", "string"), col("createdAt", "创建时间", "datetime")),
                 """
-                SELECT cr.record_id AS recordId, a.title AS activityTitle, cr.change_value AS changeValue,
+                SELECT cr.record_id AS recordId, su.username AS studentName, a.title AS activityTitle, cr.change_value AS changeValue,
                        cr.reason_type AS reasonType, cr.reason, cr.created_at AS createdAt
                 FROM CreditRecord cr
                 LEFT JOIN Activity a ON cr.activity_id = a.activity_id
+                JOIN User su ON cr.student_id = su.user_id
+                LEFT JOIN Venue v ON a.venue_id = v.venue_id
+                LEFT JOIN Campus c ON v.campus_id = c.campus_id
+                LEFT JOIN Category cat ON a.category_id = cat.category_id
+                LEFT JOIN User ou ON a.organizer_id = ou.user_id
                 """,
                 List.of(),
-                commonActivityFilters(),
+                merge(commonActivityFilters("ou"), Map.of(
+                        "studentKeyword", "(su.username LIKE CONCAT('%', :studentKeyword, '%') OR su.student_no LIKE CONCAT('%', :studentKeyword, '%'))"
+                )),
                 "",
                 "cr.created_at DESC, cr.record_id DESC"
         ));
@@ -218,12 +241,15 @@ public class QuerySqlBuilder {
     }
 
     private QueryTemplate registrationTemplate(String orderBy) {
-        Map<String, String> filters = merge(commonActivityFilters(), Map.of(
-                "registrationStatus", "r.status = :registrationStatus"
+        Map<String, String> filters = merge(commonActivityFilters("ou"), Map.of(
+                "registrationStatus", "r.status = :registrationStatus",
+                "studentKeyword", "(u.username LIKE CONCAT('%', :studentKeyword, '%') OR u.student_no LIKE CONCAT('%', :studentKeyword, '%'))",
+                "evaluatedOnly", "EXISTS (SELECT 1 FROM ActivityFeedback f WHERE f.registration_id = r.registration_id)"
         ));
         return new QueryTemplate(
                 List.of(
                         col("registrationId", "报名ID", "number"),
+                        col("activityId", "活动ID", "number"),
                         col("activityTitle", "活动名称", "string"),
                         col("studentName", "学生", "string"),
                         col("studentNo", "学号", "string"),
@@ -233,16 +259,17 @@ public class QuerySqlBuilder {
                         col("checkInTime", "签到时间", "datetime")
                 ),
                 """
-                SELECT r.registration_id AS registrationId, a.title AS activityTitle,
+                SELECT r.registration_id AS registrationId, a.activity_id AS activityId, a.title AS activityTitle,
                        u.username AS studentName, u.student_no AS studentNo,
                        r.status AS registrationStatus, r.queue_no AS queueNo,
                        r.registration_time AS registrationTime, r.check_in_time AS checkInTime
-                FROM Registration r
+                FROM Registration r FORCE INDEX (idx_registration_activity_status_queue_time)
                 JOIN Activity a ON r.activity_id = a.activity_id
                 JOIN User u ON r.student_id = u.user_id
                 JOIN Venue v ON a.venue_id = v.venue_id
                 JOIN Campus c ON v.campus_id = c.campus_id
                 JOIN Category cat ON a.category_id = cat.category_id
+                JOIN User ou ON a.organizer_id = ou.user_id
                 """,
                 List.of(),
                 filters,
@@ -251,15 +278,16 @@ public class QuerySqlBuilder {
         );
     }
 
-    private Map<String, String> commonActivityFilters() {
+    private Map<String, String> commonActivityFilters(String organizerAlias) {
         return Map.of(
                 "startFrom", "a.start_time >= :startFrom",
                 "startTo", "a.start_time < :startTo",
+                "activityKeyword", "a.title LIKE CONCAT('%', :activityKeyword, '%')",
                 "activityStatus", "a.status = :activityStatus",
                 "categoryKeyword", "cat.category_name LIKE CONCAT('%', :categoryKeyword, '%')",
                 "campusKeyword", "c.campus_name LIKE CONCAT('%', :campusKeyword, '%')",
                 "venueKeyword", "(v.venue_name LIKE CONCAT('%', :venueKeyword, '%') OR v.room_number LIKE CONCAT('%', :venueKeyword, '%'))",
-                "organizerKeyword", "u.username LIKE CONCAT('%', :organizerKeyword, '%')"
+                "organizerKeyword", organizerAlias + ".username LIKE CONCAT('%', :organizerKeyword, '%')"
         );
     }
 

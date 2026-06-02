@@ -50,6 +50,7 @@
 - 模型只生成 QueryPlan JSON，不直接执行模型生成的 SQL。
 - SQL 构建强制使用后端白名单字段、筛选条件、JOIN 和分页。
 - 支持模糊场地查询，例如“查询在光华楼的活动”。
+- 支持活动标题、学生姓名/学号和信用分阈值等自然槽位，例如“查询某活动的报名名单”“查询信用分低于80的学生”。
 - 管理员可查看 QueryPlan 预览和 SQL 预览；普通用户隐藏 SQL 细节。
 - 过宽或含糊的问题会返回追问选项。
 
@@ -77,6 +78,9 @@ DBPJ-2026
 │  ├─ schema.sql            # 建表、约束、索引、触发器和初始化数据
 │  ├─ phase2_feedback.sql   # 反馈功能增量脚本
 │  ├─ phase2_credit.sql     # 信用分功能增量脚本
+│  ├─ phase3_cascade_rules.sql # 业务级联/置空删除规则增量脚本
+│  ├─ phase3_query_indexes.sql # 查询路径索引优化增量脚本
+│  ├─ performance_checks.sql # 常用查询 EXPLAIN 验证脚本
 │  └─ fix_seed_utf8.sql     # 旧容器中文 seed 修复脚本
 ├─ work_docs                # 过程文档和迭代计划
 └─ docker-compose.yml       # MySQL 容器配置
@@ -150,6 +154,20 @@ docker compose up -d mysql
 ```bash
 docker cp sql/fix_seed_utf8.sql dbpj-2026-mysql:/tmp/fix_seed_utf8.sql
 docker exec dbpj-2026-mysql sh -c "mysql --default-character-set=utf8mb4 -ucampus -pcampus123 -D campus_activity < /tmp/fix_seed_utf8.sql"
+```
+
+若旧数据库只需要补齐业务级联和置空删除规则，可执行：
+
+```bash
+docker cp sql/phase3_cascade_rules.sql dbpj-2026-mysql:/tmp/phase3_cascade_rules.sql
+docker exec dbpj-2026-mysql mysql -ucampus -pcampus123 campus_activity -e "source /tmp/phase3_cascade_rules.sql"
+```
+
+若旧数据库只需要补齐查询路径索引优化，可执行：
+
+```bash
+docker cp sql/phase3_query_indexes.sql dbpj-2026-mysql:/tmp/phase3_query_indexes.sql
+docker exec dbpj-2026-mysql mysql -ucampus -pcampus123 campus_activity -e "source /tmp/phase3_query_indexes.sql"
 ```
 
 ## 后端运行
@@ -318,6 +336,8 @@ Authorization: Bearer <token>
 - `ActivityFeedback(registration_id)` 唯一，保证一条报名最多一条评价。
 - `CreditRecord(reason_type, registration_id)` 唯一，避免签到或缺勤信用流水重复写入。
 - `Notification(recipient_id, is_read, created_at)` 支撑未读通知和分页查询。
+- `Notification(recipient_id, is_read, created_at DESC, notification_id DESC)` 覆盖未读优先、时间倒序的通知分页。
+- `Campus -> Venue -> Activity -> Registration/ActivityFeedback` 使用级联删除，删除校区或场地时不会留下孤立活动、报名和评价数据。
 - 场地时间冲突、活动容量、用户角色合法性、反馈/信用流水一致性由数据库触发器兜底。
 
 更完整说明见 [数据库设计实验文档](./docs/数据库设计实验文档.md)。
@@ -343,12 +363,12 @@ mvn test
 - 反馈可更新。
 - 缺勤扣分只写入一次。
 - 活动状态、权限和截止时间校验。
-- 智能查询 MockMvc 契约、歧义追问、QueryPlan 字段白名单和分页限制。
+- 智能查询 MockMvc 契约、歧义追问、QueryPlan 字段白名单、自然槽位和分页限制。
 
 最近一次验证结果：
 
 ```text
-Tests run: 29, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 33, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
@@ -371,6 +391,13 @@ API smoke test：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/smoke-test.ps1 -Port 18080
+```
+
+常用查询执行计划检查：
+
+```bash
+docker cp sql/performance_checks.sql dbpj-2026-mysql:/tmp/performance_checks.sql
+docker exec dbpj-2026-mysql mysql -ucampus -pcampus123 campus_activity -e "source /tmp/performance_checks.sql"
 ```
 
 ## 常见问题

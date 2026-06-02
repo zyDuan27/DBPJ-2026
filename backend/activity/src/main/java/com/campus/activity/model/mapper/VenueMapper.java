@@ -13,13 +13,19 @@ import java.util.List;
 @Mapper
 public interface VenueMapper extends BaseMapper<Venue> {
     @Select("""
+            <script>
             SELECT v.venue_id AS id, v.venue_name AS venueName, v.room_number AS roomNumber,
                    v.capacity, v.campus_id AS campusId, c.campus_name AS campusName
             FROM Venue v
             JOIN Campus c ON v.campus_id = c.campus_id
-            WHERE (#{campusId} IS NULL OR v.campus_id = #{campusId})
-              AND (v.venue_name LIKE #{keyword} OR v.room_number LIKE #{keyword})
+            <where>
+              <if test="campusId != null">AND v.campus_id = #{campusId}</if>
+              <if test="keyword != null and keyword != ''">
+                AND (v.venue_name LIKE #{keyword} OR v.room_number LIKE #{keyword})
+              </if>
+            </where>
             ORDER BY v.venue_id
+            </script>
             """)
     List<VenueRow> listVenues(@Param("campusId") Integer campusId, @Param("keyword") String keyword);
 

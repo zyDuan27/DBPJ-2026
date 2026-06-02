@@ -48,7 +48,7 @@ CREATE TABLE Venue (
     CONSTRAINT fk_venue_campus FOREIGN KEY (campus_id)
         REFERENCES Campus(campus_id)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+        ON DELETE CASCADE,
     CONSTRAINT uq_venue_room UNIQUE (campus_id, venue_name, room_number),
     CONSTRAINT chk_venue_capacity CHECK (capacity > 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动场地字典';
@@ -77,11 +77,11 @@ CREATE TABLE Activity (
     CONSTRAINT fk_act_venue FOREIGN KEY (venue_id)
         REFERENCES Venue(venue_id)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+        ON DELETE CASCADE,
     CONSTRAINT fk_act_category FOREIGN KEY (category_id)
         REFERENCES Category(category_id)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT,
+        ON DELETE CASCADE,
     CONSTRAINT fk_act_organizer FOREIGN KEY (organizer_id)
         REFERENCES User(user_id)
         ON UPDATE CASCADE
@@ -185,8 +185,6 @@ CREATE TABLE CreditRecord (
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='信用分流水';
 
--- 与登录、活动列表、报名名单、候补递补、反馈看板和信用统计匹配的索引。
-CREATE INDEX idx_user_role ON User(role);
 CREATE TABLE Notification (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
     recipient_id INT NOT NULL COMMENT '接收用户',
@@ -212,7 +210,7 @@ CREATE TABLE Notification (
     CONSTRAINT chk_notification_read CHECK (is_read IN (0, 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内通知';
 
-CREATE INDEX idx_notification_recipient_read_time ON Notification(recipient_id, is_read, created_at);
+CREATE INDEX idx_notification_recipient_read_order ON Notification(recipient_id, is_read, created_at DESC, notification_id DESC);
 CREATE INDEX idx_notification_recipient_time ON Notification(recipient_id, created_at, notification_id);
 CREATE INDEX idx_user_role ON User(role);
 CREATE INDEX idx_user_username ON User(username);

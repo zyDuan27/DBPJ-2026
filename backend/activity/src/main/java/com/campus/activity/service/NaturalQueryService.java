@@ -74,7 +74,7 @@ public class NaturalQueryService {
     private QueryPlanDecision decidePlan(NaturalQueryRequest request, CurrentUser user) {
         if (isAmbiguousRegistrationQuestion(request.question())) {
             return QueryPlanDecision.clarification(
-                    List.of("查询某个活动的报名名单", "查询候补人数最多的活动", "查询我的报名记录"),
+                    registrationClarificationOptions(user),
                     Map.of("planner", "clarification", "reason", "报名查询缺少活动、范围或主体")
             );
         }
@@ -114,7 +114,56 @@ public class NaturalQueryService {
         }
         String text = question.trim().replaceAll("\\s+", "");
         return text.matches(".*(报名情况|报名信息|报名数据).*")
-                && !text.matches(".*(我的|某个|活动|候补|取消|已取消|名单|本月|今天|明天|昨天).*");
+                && !text.matches(".*(我的|某个|候补|取消|已取消|名单|本月|今天|明天|昨天).*")
+                && !hasSpecificActivityPrefix(text);
+    }
+
+    private boolean hasSpecificActivityPrefix(String text) {
+        for (String marker : List.of("的报名情况", "的报名信息", "的报名数据")) {
+            int index = text.indexOf(marker);
+            if (index <= 0) {
+                continue;
+            }
+            String prefix = text.substring(0, index)
+                    .replace("查询", "")
+                    .replace("查看", "")
+                    .replace("查一下", "")
+                    .replace("活动", "")
+                    .trim();
+            if (!prefix.isBlank()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private List<String> registrationClarificationOptions(CurrentUser user) {
+        if (user.role() == Role.STUDENT) {
+            return List.of("查询我的报名记录", "查询明天的活动", "查询我的未读通知");
+        }
+        List<String> options = new java.util.ArrayList<>();
+        String activitySql = """
+                SELECT title
+                FROM Activity
+                WHERE (:isAdmin = 1 OR organizer_id = :currentUserId)
+                  AND status IN ('PUBLISHED', 'ONGOING', 'FINISHED', 'PENDING_REVIEW')
+                ORDER BY start_time DESC, activity_id DESC
+                LIMIT 3
+                """;
+        Map<String, Object> params = Map.of(
+                "isAdmin", user.role() == Role.ADMIN ? 1 : 0,
+                "currentUserId", user.id()
+        );
+        for (String title : namedParameterJdbcTemplate.queryForList(activitySql, params, String.class)) {
+            options.add("查询" + title + "的报名名单");
+        }
+        options.add("查询候补人数最多的活动");
+        if (user.role() == Role.ADMIN) {
+            options.add("查询本月活动报名情况");
+        } else {
+            options.add("查询我的活动报名情况");
+        }
+        return options.stream().filter(item -> item != null && !item.isBlank()).limit(5).toList();
     }
 
     private String summarize(QueryPlan plan, List<Map<String, Object>> rows, long total) {

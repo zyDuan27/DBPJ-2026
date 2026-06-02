@@ -22,15 +22,14 @@ public interface ActivityMapper extends BaseMapper<Activity> {
             <script>
             SELECT COUNT(*)
             FROM Activity a
+            <if test="campusId != null">
             JOIN Venue v ON a.venue_id = v.venue_id
-            JOIN Campus c ON v.campus_id = c.campus_id
-            JOIN Category cat ON a.category_id = cat.category_id
-            JOIN User u ON a.organizer_id = u.user_id
+            </if>
             <where>
                 <if test="studentVisible">AND a.status IN ('PUBLISHED', 'ONGOING', 'FINISHED')</if>
                 <if test="organizerId != null">AND a.organizer_id = #{organizerId}</if>
                 <if test="keyword != null and keyword != ''">AND a.title LIKE CONCAT('%', #{keyword}, '%')</if>
-                <if test="campusId != null">AND c.campus_id = #{campusId}</if>
+                <if test="campusId != null">AND v.campus_id = #{campusId}</if>
                 <if test="categoryId != null">AND a.category_id = #{categoryId}</if>
                 <if test="status != null and status != ''">AND a.status = #{status}</if>
             </where>

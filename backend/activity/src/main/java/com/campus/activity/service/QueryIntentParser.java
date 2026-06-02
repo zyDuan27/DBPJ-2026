@@ -6,13 +6,16 @@ import com.campus.activity.model.query.QueryPlan;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class QueryIntentParser {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
+    private static final Pattern CREDIT_SCORE_LIMIT = Pattern.compile("信用分(?:低于|小于|不高于|<=?)(\\d{1,3})");
 
     public QueryPlan parse(String question, Integer page, Integer size) {
         String text = normalize(question);
@@ -46,7 +49,7 @@ public class QueryIntentParser {
         if (containsAny(text, "候补人数最多", "候补最多")) {
             return QueryIntent.WAITLIST_TOP;
         }
-        if (containsAny(text, "我的报名", "我的活动", "报名记录")) {
+        if (containsAny(text, "我的报名", "我的活动", "我报名", "我参加", "报名记录")) {
             return QueryIntent.MY_REGISTRATION_LIST;
         }
         if (containsAny(text, "报名名单", "报名情况", "已取消报名")) {
@@ -87,6 +90,8 @@ public class QueryIntentParser {
         if (text.contains("计算机协会")) {
             plan.addFilter("organizerKeyword", "计算机协会");
         }
+        applyActivityKeywordSlot(plan, text);
+        applyStudentKeywordSlot(plan, text);
         if (text.contains("未读")) {
             plan.addFilter("unreadOnly", true);
         }
@@ -100,8 +105,49 @@ public class QueryIntentParser {
         } else if (text.contains("未签到")) {
             plan.addFilter("registrationStatus", "ENROLLED");
         }
+        if (containsAny(text, "评价过", "已评价", "有评价", "有反馈", "反馈过")) {
+            plan.addFilter("evaluatedOnly", true);
+        }
         if (plan.getIntent() == QueryIntent.LOW_RATING_FEEDBACK) {
             plan.addFilter("maxRating", 2);
+        }
+        Matcher creditLimit = CREDIT_SCORE_LIMIT.matcher(text);
+        if (creditLimit.find()) {
+            plan.addFilter("maxCreditScore", Integer.parseInt(creditLimit.group(1)));
+        } else if (plan.getIntent() == QueryIntent.CREDIT_RISK && text.contains("信用分低")) {
+            plan.addFilter("maxCreditScore", 80);
+        }
+    }
+
+    private void applyActivityKeywordSlot(QueryPlan plan, String text) {
+        String marker = null;
+        for (String candidate : List.of("的报名名单", "的报名情况", "签到情况", "未签到学生", "缺勤记录", "低分反馈", "低评分反馈")) {
+            if (text.contains(candidate)) {
+                marker = candidate;
+                break;
+            }
+        }
+        if (marker == null) {
+            return;
+        }
+        int end = text.indexOf(marker);
+        String prefix = text.substring(0, end)
+                .replace("查询", "")
+                .replace("查看", "")
+                .replace("一下", "")
+                .replace("某个活动", "")
+                .trim();
+        if (!prefix.isBlank() && !containsAny(prefix, "我的", "某活动")) {
+            plan.addFilter("activityKeyword", prefix);
+        }
+    }
+
+    private void applyStudentKeywordSlot(QueryPlan plan, String text) {
+        for (String name : List.of("张三", "李四")) {
+            if (text.contains(name)) {
+                plan.addFilter("studentKeyword", name);
+                return;
+            }
         }
     }
 

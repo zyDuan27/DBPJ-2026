@@ -23,8 +23,9 @@ public class QueryPlanValidator {
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
     private static final Set<String> ALLOWED_FILTERS = Set.of(
-            "startFrom", "startTo", "activityStatus", "categoryKeyword", "campusKeyword", "venueKeyword", "organizerKeyword",
-            "registrationStatus", "maxRating", "unreadOnly", "notificationType"
+            "startFrom", "startTo", "activityKeyword", "activityStatus", "categoryKeyword", "campusKeyword",
+            "venueKeyword", "organizerKeyword", "studentKeyword", "registrationStatus", "maxRating",
+            "maxCreditScore", "unreadOnly", "notificationType", "evaluatedOnly"
     );
     private static final Set<String> ALLOWED_OPERATORS = Set.of("eq", "contains", "gte", "gt", "lte", "lt");
     private static final Set<String> ACTIVITY_STATUSES = Set.of(
@@ -40,6 +41,8 @@ public class QueryPlanValidator {
     private static final Map<String, String> FIELD_ALIASES = Map.ofEntries(
             Map.entry("activity.startTime", "startFrom"),
             Map.entry("activity.endTime", "startTo"),
+            Map.entry("activity.title", "activityKeyword"),
+            Map.entry("activity.name", "activityKeyword"),
             Map.entry("activity.status", "activityStatus"),
             Map.entry("activity.category", "categoryKeyword"),
             Map.entry("category.name", "categoryKeyword"),
@@ -50,8 +53,14 @@ public class QueryPlanValidator {
             Map.entry("venue.room", "venueKeyword"),
             Map.entry("activity.organizer", "organizerKeyword"),
             Map.entry("organizer.name", "organizerKeyword"),
+            Map.entry("student.name", "studentKeyword"),
+            Map.entry("student.no", "studentKeyword"),
+            Map.entry("student.studentNo", "studentKeyword"),
             Map.entry("registration.status", "registrationStatus"),
+            Map.entry("registration.evaluated", "evaluatedOnly"),
+            Map.entry("feedback.exists", "evaluatedOnly"),
             Map.entry("feedback.rating", "maxRating"),
+            Map.entry("credit.score", "maxCreditScore"),
             Map.entry("notification.unread", "unreadOnly"),
             Map.entry("notification.type", "notificationType")
     );
@@ -134,7 +143,8 @@ public class QueryPlanValidator {
             case "registrationStatus" -> enumValue(value, REGISTRATION_STATUSES, "报名状态");
             case "notificationType" -> enumValue(value, NOTIFICATION_TYPES, "通知类型");
             case "maxRating" -> parseInteger(value, 1, 5, "评分上限");
-            case "unreadOnly" -> parseBoolean(value);
+            case "maxCreditScore" -> parseInteger(value, 0, 100, "信用分上限");
+            case "unreadOnly", "evaluatedOnly" -> parseBoolean(value);
             default -> value.toString().trim();
         };
     }

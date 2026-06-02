@@ -30,8 +30,13 @@ public class NaturalQueryPromptBuilder {
                 }
 
                 allowed filter fields:
-                startFrom, startTo, activityStatus, categoryKeyword, campusKeyword, venueKeyword, organizerKeyword,
-                registrationStatus, maxRating, unreadOnly, notificationType.
+                startFrom, startTo, activityKeyword, activityStatus, categoryKeyword, campusKeyword, venueKeyword,
+                organizerKeyword, studentKeyword, registrationStatus, maxRating, maxCreditScore, unreadOnly,
+                notificationType, evaluatedOnly.
+                semantic aliases you may use:
+                activity.title, category.name, campus.name, venue.name, venue.room, organizer.name,
+                student.name, student.no, registration.status, registration.evaluated, feedback.exists,
+                feedback.rating, credit.score, notification.type.
                 allowed statuses:
                 activityStatus = DRAFT, PENDING_REVIEW, REJECTED, PUBLISHED, ONGOING, FINISHED, CANCELLED;
                 registrationStatus = ENROLLED, WAITLISTED, CANCELLED, CHECKED_IN, ABSENT;

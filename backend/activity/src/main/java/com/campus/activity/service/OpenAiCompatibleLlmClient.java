@@ -7,9 +7,9 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -55,11 +55,16 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                     .header("Authorization", "Bearer " + properties.getApiKey())
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
-                    .retrieve()
-                    .body(String.class);
-        } catch (RestClientResponseException ex) {
-            throw new BusinessException(40002, "LLM 调用失败：HTTP " + ex.getStatusCode().value()
-                    + "，响应：" + abbreviate(ex.getResponseBodyAsString()));
+                    .exchange((request, response) -> {
+                        String text = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
+                        if (response.getStatusCode().isError()) {
+                            throw new BusinessException(40002, "LLM 调用失败：HTTP " + response.getStatusCode().value()
+                                    + "，响应：" + abbreviate(text));
+                        }
+                        return text;
+                    });
+        } catch (BusinessException ex) {
+            throw ex;
         } catch (RestClientException ex) {
             throw new BusinessException(40002, "LLM 调用失败：" + ex.getMessage());
         }

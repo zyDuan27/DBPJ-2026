@@ -48,6 +48,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -115,6 +116,47 @@ class ActivityApplicationTests {
 
     @Test
     void contextLoads() {
+    }
+
+    @Test
+    void deletingCampusCascadesVenuesActivitiesRegistrationsAndFeedback() {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        Integer campusId = jdbcTemplate.queryForObject(
+                "SELECT campus_id FROM Venue WHERE venue_id = ?",
+                Integer.class,
+                fixture.venueId()
+        );
+        int registrationId = insertAndTrack(new ArrayList<>(), """
+                INSERT INTO Registration(student_id, activity_id, status, check_in_time)
+                VALUES (?, ?, 'CHECKED_IN', ?)
+                """, fixture.studentOneId(), fixture.activityId(), LocalDateTime.now());
+        int feedbackId = insertAndTrack(new ArrayList<>(), """
+                INSERT INTO ActivityFeedback(registration_id, activity_id, student_id, rating, content)
+                VALUES (?, ?, ?, 5, 'cascade check')
+                """, registrationId, fixture.activityId(), fixture.studentOneId());
+
+        jdbcTemplate.update("DELETE FROM Campus WHERE campus_id = ?", campusId);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM Venue WHERE venue_id = ?",
+                Integer.class,
+                fixture.venueId()
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM Activity WHERE activity_id = ?",
+                Integer.class,
+                fixture.activityId()
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM Registration WHERE registration_id = ?",
+                Integer.class,
+                registrationId
+        )).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ActivityFeedback WHERE feedback_id = ?",
+                Integer.class,
+                feedbackId
+        )).isZero();
     }
 
     @Test
@@ -290,6 +332,11 @@ class ActivityApplicationTests {
     @Test
     void mockMvcNaturalQueryReturnsClarificationForBroadQuestion() throws Exception {
         TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        String activityTitle = jdbcTemplate.queryForObject(
+                "SELECT title FROM Activity WHERE activity_id = ?",
+                String.class,
+                fixture.activityId()
+        );
 
         mockMvc.perform(post("/api/v1/natural-query")
                         .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
@@ -301,7 +348,118 @@ class ActivityApplicationTests {
                 .andExpect(jsonPath("$.code").value(20000))
                 .andExpect(jsonPath("$.data.clarificationRequired").value(true))
                 .andExpect(jsonPath("$.data.clarificationOptions").isArray())
+                .andExpect(jsonPath("$.data.clarificationOptions", hasItem("查询我的报名记录")))
                 .andExpect(jsonPath("$.data.rows").isArray());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(organizer(fixture.organizerId())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询活动报名情况","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.clarificationRequired").value(true))
+                .andExpect(jsonPath("$.data.clarificationOptions", hasItem("查询" + activityTitle + "的报名名单")));
+    }
+
+    @Test
+    void mockMvcNaturalQuerySupportsNaturalSlotsForCreditAndActivityTitle() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        int adminId = insertUser("ADMIN", "natural-query-admin-slots", null, uniquePhone("192"));
+        int lowCreditStudentId = insertUser("STUDENT", "low-credit-student", "R" + Long.toString(System.nanoTime()).substring(0, 12), uniquePhone("191"));
+        jdbcTemplate.update("""
+                INSERT INTO CreditRecord(student_id, activity_id, change_value, reason_type, reason, operator_id)
+                VALUES (?, ?, -25, 'MANUAL_ADJUST', 'contract test penalty', ?)
+                """, lowCreditStudentId, fixture.activityId(), adminId);
+
+        String activityTitle = jdbcTemplate.queryForObject(
+                "SELECT title FROM Activity WHERE activity_id = ?",
+                String.class,
+                fixture.activityId()
+        );
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(admin(adminId)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询信用分低于80的学生","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("CREDIT_RISK"))
+                .andExpect(jsonPath("$.data.rows[0].studentName").value("low-credit-student"));
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(organizer(fixture.organizerId())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询%s的报名名单","page":1,"size":10}
+                                """.formatted(activityTitle)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_REGISTRATION_LIST"))
+                .andExpect(jsonPath("$.data.rows").isArray());
+
+        Integer campusId = jdbcTemplate.queryForObject(
+                "SELECT campus_id FROM Venue WHERE venue_id = ?",
+                Integer.class,
+                fixture.venueId()
+        );
+        jdbcTemplate.update("UPDATE Campus SET campus_name = ? WHERE campus_id = ?",
+                "邯郸校区-" + System.nanoTime(), campusId);
+        AuthContext.set(student(fixture.studentOneId(), "student-one"));
+        registrationService.enroll(fixture.activityId());
+        AuthContext.clear();
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询我报名的在邯郸校区开展的活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("MY_REGISTRATION_LIST"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.rows[0].activityId").value(fixture.activityId()))
+                .andExpect(jsonPath("$.data.sqlPreview").doesNotExist());
+
+        int feedbackRegistrationId = jdbcTemplate.queryForObject("""
+                SELECT registration_id
+                FROM Registration
+                WHERE student_id = ? AND activity_id = ?
+                """, Integer.class, fixture.studentOneId(), fixture.activityId());
+        jdbcTemplate.update("UPDATE Registration SET status = 'CHECKED_IN', check_in_time = CURRENT_TIMESTAMP WHERE registration_id = ?",
+                feedbackRegistrationId);
+        insertAndTrack(new ArrayList<>(), """
+                INSERT INTO ActivityFeedback(registration_id, activity_id, student_id, rating, content)
+                VALUES (?, ?, ?, 4, 'natural query evaluated filter')
+                """, feedbackRegistrationId, fixture.activityId(), fixture.studentOneId());
+
+        TestFixture notEvaluatedFixture = createFixture(LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(2), 5);
+        Integer notEvaluatedCampusId = jdbcTemplate.queryForObject(
+                "SELECT campus_id FROM Venue WHERE venue_id = ?",
+                Integer.class,
+                notEvaluatedFixture.venueId()
+        );
+        jdbcTemplate.update("UPDATE Campus SET campus_name = ? WHERE campus_id = ?",
+                "邯郸校区-" + System.nanoTime(), notEvaluatedCampusId);
+        AuthContext.set(student(fixture.studentOneId(), "student-one"));
+        registrationService.enroll(notEvaluatedFixture.activityId());
+        AuthContext.clear();
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询我报名的在邯郸校区开展的活动，要求活动是我评价过的","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("MY_REGISTRATION_LIST"))
+                .andExpect(jsonPath("$.data.total").value(1))
+                .andExpect(jsonPath("$.data.rows[0].activityId").value(fixture.activityId()));
     }
 
     @Test
@@ -323,6 +481,22 @@ class ActivityApplicationTests {
         assertThat(decision.plan().getFilters())
                 .extracting("key")
                 .contains("activityStatus", "campusKeyword", "venueKeyword", "startFrom");
+    }
+
+    @Test
+    void queryPlanValidatorAcceptsNaturalSlotFilters() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("CREDIT_RISK");
+        draft.setDomain("credit");
+        draft.getFilters().add(filter("credit.score", "lte", 80));
+        draft.getFilters().add(filter("student.name", "contains", "张三"));
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isFalse();
+        assertThat(decision.plan().getFilters())
+                .extracting("key")
+                .contains("maxCreditScore", "studentKeyword");
     }
 
     @Test
