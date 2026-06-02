@@ -10,15 +10,18 @@ import com.campus.activity.model.dto.FeedbackRequest;
 import com.campus.activity.model.dto.ReviewRequest;
 import com.campus.activity.model.query.LlmQueryPlanDraft;
 import com.campus.activity.model.query.LlmQueryPlanFilter;
+import com.campus.activity.model.query.QueryPlan;
 import com.campus.activity.model.query.QueryIntent;
 import com.campus.activity.model.query.QueryPlanDecision;
 import com.campus.activity.model.vo.CheckInCodeVO;
 import com.campus.activity.model.vo.CheckInResultVO;
 import com.campus.activity.model.vo.RegistrationActionVO;
 import com.campus.activity.service.ActivityService;
+import com.campus.activity.service.AdminSqlValidator;
 import com.campus.activity.service.AuthService;
 import com.campus.activity.service.CheckInService;
 import com.campus.activity.service.FeedbackService;
+import com.campus.activity.service.QueryIntentParser;
 import com.campus.activity.service.QueryPlanValidator;
 import com.campus.activity.service.RegistrationService;
 import org.junit.jupiter.api.AfterEach;
@@ -92,6 +95,12 @@ class ActivityApplicationTests {
 
     @Autowired
     private QueryPlanValidator queryPlanValidator;
+
+    @Autowired
+    private AdminSqlValidator adminSqlValidator;
+
+    @Autowired
+    private QueryIntentParser queryIntentParser;
 
     @BeforeEach
     void ensureNotificationTable() {
@@ -463,6 +472,132 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void mockMvcNaturalQuerySupportsSemanticActivityKeyword() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        String title = "数据库系统项目分享会-" + System.nanoTime();
+        jdbcTemplate.update("""
+                UPDATE Activity
+                SET title = ?, description = ?
+                WHERE activity_id = ?
+                """, title, "面向数据库课程项目的小型分享会，介绍活动报名系统的设计与实现。", fixture.activityId());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询一个和数据库相关的活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_LIST"))
+                .andExpect(jsonPath("$.data.rows[*].activityTitle", hasItem(title)));
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询关于数据库的活动","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ACTIVITY_LIST"))
+                .andExpect(jsonPath("$.data.rows[*].activityTitle", hasItem(title)));
+    }
+
+    @Test
+    void queryIntentParserExtractsSemanticActivityKeywordWithoutPollutingBroadActivityQuery() {
+        QueryPlan semanticPlan = queryIntentParser.parse("查询一个和数据库相关的活动", 1, 20);
+        assertThat(semanticPlan.getIntent()).isEqualTo(QueryIntent.ACTIVITY_LIST);
+        assertThat(semanticPlan.getFilters())
+                .anyMatch(filter -> "activityKeyword".equals(filter.key()) && "数据库".equals(filter.value()));
+
+        QueryPlan broadPlan = queryIntentParser.parse("查询明天的活动", 1, 20);
+        assertThat(broadPlan.getIntent()).isEqualTo(QueryIntent.ACTIVITY_LIST);
+        assertThat(broadPlan.getFilters())
+                .noneMatch(filter -> "activityKeyword".equals(filter.key()));
+    }
+
+    @Test
+    void mockMvcNaturalQueryReturnsCampusDomainForCampusWithoutActivities() throws Exception {
+        int studentId = insertUser("STUDENT", "campus-query-student", "CAMPUS" + Long.toString(System.nanoTime()).substring(0, 8), uniquePhone("190"));
+        String campusName = "no-activity-campus-" + System.nanoTime();
+        insertAndTrack(campusIds, """
+                INSERT INTO Campus(campus_name, location)
+                VALUES (?, ?)
+                """, campusName, "empty-location");
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(studentId, "campus-query-student")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"有活动未举办的校区","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("CAMPUS_WITHOUT_ACTIVITY"))
+                .andExpect(jsonPath("$.data.columns[0].key").value("campusId"))
+                .andExpect(jsonPath("$.data.rows[*].campusName", hasItem(campusName)))
+                .andExpect(jsonPath("$.data.sqlPreview").doesNotExist());
+    }
+
+    @Test
+    void mockMvcNaturalQueryReturnsOrganizerParticipantStudentsWithoutPhone() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        String studentOneName = jdbcTemplate.queryForObject("SELECT username FROM User WHERE user_id = ?", String.class, fixture.studentOneId());
+        insertAndTrack(new ArrayList<>(), """
+                INSERT INTO Registration(student_id, activity_id, status, registration_time)
+                VALUES (?, ?, 'CHECKED_IN', ?)
+                """, fixture.studentOneId(), fixture.activityId(), LocalDateTime.now().minusDays(1));
+        insertAndTrack(new ArrayList<>(), """
+                INSERT INTO Registration(student_id, activity_id, status, registration_time)
+                VALUES (?, ?, 'ENROLLED', ?)
+                """, fixture.studentTwoId(), fixture.activityId(), LocalDateTime.now());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(organizer(fixture.organizerId())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询参与过我创建的活动的所有学生信息","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("ORGANIZER_PARTICIPANT_STUDENTS"))
+                .andExpect(jsonPath("$.data.columns[*].key", hasItem("studentName")))
+                .andExpect(jsonPath("$.data.columns[*].key", hasItem("participationCount")))
+                .andExpect(jsonPath("$.data.rows[*].studentName", hasItem(studentOneName)))
+                .andExpect(jsonPath("$.data.rows[0].phone").doesNotExist());
+    }
+
+    @Test
+    void mockMvcNaturalQueryReturnsMyFeedbackRecordsInsteadOfRegistrations() throws Exception {
+        TestFixture fixture = createFixture(LocalDateTime.now().plusDays(1), LocalDateTime.now().plusDays(1).plusHours(2), 5);
+        int registrationId = insertAndTrack(new ArrayList<>(), """
+                INSERT INTO Registration(student_id, activity_id, status, check_in_time)
+                VALUES (?, ?, 'CHECKED_IN', ?)
+                """, fixture.studentOneId(), fixture.activityId(), LocalDateTime.now());
+        int feedbackId = insertAndTrack(new ArrayList<>(), """
+                INSERT INTO ActivityFeedback(registration_id, activity_id, student_id, rating, content)
+                VALUES (?, ?, ?, 4, 'natural feedback query')
+                """, registrationId, fixture.activityId(), fixture.studentOneId());
+
+        mockMvc.perform(post("/api/v1/natural-query")
+                        .header("Authorization", bearer(student(fixture.studentOneId(), "student-one")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"question":"查询我的活动评价记录","page":1,"size":10}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(20000))
+                .andExpect(jsonPath("$.data.intent").value("MY_FEEDBACK_LIST"))
+                .andExpect(jsonPath("$.data.summary").value("共查询到 1 条你的活动评价记录。"))
+                .andExpect(jsonPath("$.data.columns[*].key", hasItem("feedbackId")))
+                .andExpect(jsonPath("$.data.columns[*].key", hasItem("rating")))
+                .andExpect(jsonPath("$.data.rows[0].feedbackId").value(feedbackId))
+                .andExpect(jsonPath("$.data.rows[0].rating").value(4))
+                .andExpect(jsonPath("$.data.rows[0].registrationId").doesNotExist());
+    }
+
+    @Test
     void queryPlanValidatorAcceptsSafeLlmPlan() {
         LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
         draft.setIntent("ACTIVITY_LIST");
@@ -517,6 +652,31 @@ class ActivityApplicationTests {
     }
 
     @Test
+    void queryPlanValidatorNormalizesCampusNotExistsPlan() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.setDomain("campus");
+        draft.setDistinct(true);
+        draft.getNotExists().add("activity");
+
+        QueryPlanDecision decision = queryPlanValidator.validate(draft, 1, 20);
+
+        assertThat(decision.clarificationRequired()).isFalse();
+        assertThat(decision.plan().getIntent()).isEqualTo(QueryIntent.CAMPUS_WITHOUT_ACTIVITY);
+        assertThat(decision.planPreview()).containsEntry("queryMode", "DSL");
+    }
+
+    @Test
+    void queryPlanValidatorRejectsSensitiveSelectField() {
+        LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
+        draft.setIntent("ACTIVITY_LIST");
+        draft.setDomain("activity");
+        draft.getSelectFields().add("user.password");
+
+        assertBusinessCode(() -> queryPlanValidator.validate(draft, 1, 20), 40002);
+    }
+
+    @Test
     void queryPlanValidatorRejectsUnknownLlmField() {
         LlmQueryPlanDraft draft = new LlmQueryPlanDraft();
         draft.setIntent("ACTIVITY_LIST");
@@ -535,6 +695,18 @@ class ActivityApplicationTests {
 
         assertThat(decision.clarificationRequired()).isTrue();
         assertThat(decision.clarificationOptions()).contains("查询我的报名记录");
+    }
+
+    @Test
+    void adminSqlValidatorAllowsOnlySafeSelects() {
+        assertThat(adminSqlValidator.validateAndLimit("SELECT campus_id AS campusId, campus_name AS campusName FROM Campus"))
+                .endsWith("LIMIT 50");
+        assertThat(adminSqlValidator.validateAndLimit("SELECT campus_id FROM Campus LIMIT 500"))
+                .endsWith("LIMIT 50");
+        assertBusinessCode(() -> adminSqlValidator.validateAndLimit("SELECT password FROM User"), 40002);
+        assertBusinessCode(() -> adminSqlValidator.validateAndLimit("SELECT * FROM UnknownTable"), 40002);
+        assertBusinessCode(() -> adminSqlValidator.validateAndLimit("UPDATE User SET username = 'x'"), 40002);
+        assertBusinessCode(() -> adminSqlValidator.validateAndLimit("SELECT campus_id FROM Campus; SELECT user_id FROM User"), 40002);
     }
 
     @Test

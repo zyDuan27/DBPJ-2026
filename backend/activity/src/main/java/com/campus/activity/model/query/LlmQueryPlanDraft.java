@@ -6,11 +6,17 @@ import java.util.List;
 public class LlmQueryPlanDraft {
     private String intent;
     private String domain;
+    private String queryMode;
+    private String sql;
+    private String summaryHint;
     private List<String> selectFields = new ArrayList<>();
     private List<LlmQueryPlanFilter> filters = new ArrayList<>();
+    private List<String> exists = new ArrayList<>();
+    private List<String> notExists = new ArrayList<>();
     private List<String> metrics = new ArrayList<>();
     private List<String> groupBy = new ArrayList<>();
     private List<String> orderBy = new ArrayList<>();
+    private Boolean distinct;
     private Integer page;
     private Integer size;
     private Boolean ambiguity;
@@ -32,6 +38,30 @@ public class LlmQueryPlanDraft {
         this.domain = domain;
     }
 
+    public String getQueryMode() {
+        return queryMode;
+    }
+
+    public void setQueryMode(String queryMode) {
+        this.queryMode = queryMode;
+    }
+
+    public String getSql() {
+        return sql;
+    }
+
+    public void setSql(String sql) {
+        this.sql = sql;
+    }
+
+    public String getSummaryHint() {
+        return summaryHint;
+    }
+
+    public void setSummaryHint(String summaryHint) {
+        this.summaryHint = summaryHint;
+    }
+
     public List<String> getSelectFields() {
         return selectFields;
     }
@@ -46,6 +76,22 @@ public class LlmQueryPlanDraft {
 
     public void setFilters(List<LlmQueryPlanFilter> filters) {
         this.filters = filters == null ? new ArrayList<>() : filters;
+    }
+
+    public List<String> getExists() {
+        return exists;
+    }
+
+    public void setExists(List<String> exists) {
+        this.exists = exists == null ? new ArrayList<>() : exists;
+    }
+
+    public List<String> getNotExists() {
+        return notExists;
+    }
+
+    public void setNotExists(List<String> notExists) {
+        this.notExists = notExists == null ? new ArrayList<>() : notExists;
     }
 
     public List<String> getMetrics() {
@@ -70,6 +116,14 @@ public class LlmQueryPlanDraft {
 
     public void setOrderBy(List<String> orderBy) {
         this.orderBy = orderBy == null ? new ArrayList<>() : orderBy;
+    }
+
+    public Boolean getDistinct() {
+        return distinct;
+    }
+
+    public void setDistinct(Boolean distinct) {
+        this.distinct = distinct;
     }
 
     public Integer getPage() {

@@ -27,6 +27,9 @@ public class QueryPlanValidator {
             "venueKeyword", "organizerKeyword", "studentKeyword", "registrationStatus", "maxRating",
             "maxCreditScore", "unreadOnly", "notificationType", "evaluatedOnly"
     );
+    private static final Set<String> ALLOWED_DOMAINS = Set.of(
+            "activity", "campus", "venue", "student", "registration", "checkIn", "feedback", "credit", "notification"
+    );
     private static final Set<String> ALLOWED_OPERATORS = Set.of("eq", "contains", "gte", "gt", "lte", "lt");
     private static final Set<String> ACTIVITY_STATUSES = Set.of(
             "DRAFT", "PENDING_REVIEW", "REJECTED", "PUBLISHED", "ONGOING", "FINISHED", "CANCELLED"
@@ -77,14 +80,17 @@ public class QueryPlanValidator {
             );
         }
         QueryIntent intent = parseIntent(draft.getIntent());
+        validateDomain(draft.getDomain());
         List<QueryFilter> safeFilters = draft.getFilters().stream()
                 .map(this::validateFilter)
                 .toList();
-        intent = normalizeIntent(intent, safeFilters);
+        intent = normalizeIntent(intent, draft, safeFilters);
         QueryPlan plan = new QueryPlan(intent, sanitizePage(firstNonNull(draft.getPage(), requestPage)),
                 sanitizeSize(firstNonNull(draft.getSize(), requestSize)));
         plan.setPlanner("llm");
+        plan.setDistinct(Boolean.TRUE.equals(draft.getDistinct()));
         for (String field : draft.getSelectFields()) {
+            rejectSensitiveField(field);
             plan.addSelectField(field);
         }
         for (String metric : draft.getMetrics()) {
@@ -95,6 +101,12 @@ public class QueryPlanValidator {
         }
         for (String order : draft.getOrderBy()) {
             plan.addOrderBy(order);
+        }
+        for (String exists : draft.getExists()) {
+            plan.addExists(exists);
+        }
+        for (String notExists : draft.getNotExists()) {
+            plan.addNotExists(notExists);
         }
         for (QueryFilter safeFilter : safeFilters) {
             plan.addFilter(safeFilter.key(), safeFilter.value());
@@ -111,8 +123,12 @@ public class QueryPlanValidator {
         preview.put("planner", plan.getPlanner());
         preview.put("intent", plan.getIntent().name());
         preview.put("domain", domain == null || domain.isBlank() ? inferDomain(plan.getIntent()) : domain);
+        preview.put("queryMode", plan.getPlanner().equals("rules") ? "RULE_FALLBACK" : "DSL");
         preview.put("filters", plan.getFilters());
         preview.put("selectFields", plan.getSelectFields());
+        preview.put("exists", plan.getExists());
+        preview.put("notExists", plan.getNotExists());
+        preview.put("distinct", plan.isDistinct());
         preview.put("metrics", plan.getMetrics());
         preview.put("groupBy", plan.getGroupBy());
         preview.put("orderBy", plan.getOrderBy());
@@ -136,7 +152,27 @@ public class QueryPlanValidator {
         return new QueryFilter(key, normalizeValue(key, filter.getValue()));
     }
 
-    private QueryIntent normalizeIntent(QueryIntent intent, List<QueryFilter> filters) {
+    public Map<String, Object> adminSqlPreview(LlmQueryPlanDraft draft) {
+        Map<String, Object> preview = preview(draft);
+        preview.put("queryMode", "ADMIN_SQL");
+        preview.put("summaryHint", draft.getSummaryHint());
+        return preview;
+    }
+
+    private QueryIntent normalizeIntent(QueryIntent intent, LlmQueryPlanDraft draft, List<QueryFilter> filters) {
+        if ("campus".equalsIgnoreCase(draft.getDomain())
+                && (intent == QueryIntent.ACTIVITY_LIST || intent == QueryIntent.CAMPUS_WITHOUT_ACTIVITY)
+                && draft.getNotExists().stream().anyMatch(item -> item != null && item.toLowerCase(Locale.ROOT).contains("activity"))) {
+            return QueryIntent.CAMPUS_WITHOUT_ACTIVITY;
+        }
+        if ("student".equalsIgnoreCase(draft.getDomain())
+                && (intent == QueryIntent.ACTIVITY_REGISTRATION_LIST || intent == QueryIntent.ORGANIZER_PARTICIPANT_STUDENTS)
+                && (draft.getDistinct() == null || Boolean.TRUE.equals(draft.getDistinct()))) {
+            return QueryIntent.ORGANIZER_PARTICIPANT_STUDENTS;
+        }
+        if ("feedback".equalsIgnoreCase(draft.getDomain()) && intent == QueryIntent.MY_REGISTRATION_LIST) {
+            return QueryIntent.MY_FEEDBACK_LIST;
+        }
         if (intent == QueryIntent.ACTIVITY_LIST
                 && filters.stream().anyMatch(filter -> "registrationStatus".equals(filter.key()) || "evaluatedOnly".equals(filter.key()))) {
             return QueryIntent.MY_REGISTRATION_LIST;
@@ -198,10 +234,14 @@ public class QueryPlanValidator {
     private Map<String, Object> preview(LlmQueryPlanDraft draft) {
         Map<String, Object> preview = new LinkedHashMap<>();
         preview.put("planner", "llm");
+        preview.put("queryMode", draft.getQueryMode() == null || draft.getQueryMode().isBlank() ? "DSL" : draft.getQueryMode());
         preview.put("intent", draft.getIntent());
         preview.put("domain", draft.getDomain());
         preview.put("filters", draft.getFilters());
         preview.put("selectFields", draft.getSelectFields());
+        preview.put("exists", draft.getExists());
+        preview.put("notExists", draft.getNotExists());
+        preview.put("distinct", draft.getDistinct());
         preview.put("metrics", draft.getMetrics());
         preview.put("groupBy", draft.getGroupBy());
         preview.put("orderBy", draft.getOrderBy());
@@ -216,6 +256,25 @@ public class QueryPlanValidator {
             return QueryIntent.valueOf(value == null ? "" : value.trim());
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(40002, "查询计划包含未知意图：" + value);
+        }
+    }
+
+    private void validateDomain(String domain) {
+        if (domain == null || domain.isBlank()) {
+            return;
+        }
+        if (!ALLOWED_DOMAINS.contains(domain.trim())) {
+            throw new BusinessException(40002, "查询计划包含非法结果域：" + domain);
+        }
+    }
+
+    private void rejectSensitiveField(String field) {
+        if (field == null) {
+            return;
+        }
+        String lowered = field.toLowerCase(Locale.ROOT);
+        if (lowered.contains("password") || lowered.contains("token") || lowered.contains("secret") || lowered.contains("hash")) {
+            throw new BusinessException(40002, "查询计划包含敏感字段：" + field);
         }
     }
 
@@ -277,9 +336,11 @@ public class QueryPlanValidator {
             case ACTIVITY_LIST, WAITLIST_TOP -> "activity";
             case ACTIVITY_REGISTRATION_LIST, MY_REGISTRATION_LIST -> "registration";
             case CHECK_IN_STATUS, ABSENCE_LIST -> "checkIn";
-            case LOW_RATING_FEEDBACK -> "feedback";
+            case LOW_RATING_FEEDBACK, MY_FEEDBACK_LIST -> "feedback";
             case CREDIT_RISK, CREDIT_RECORDS -> "credit";
             case NOTIFICATION_LIST -> "notification";
+            case CAMPUS_WITHOUT_ACTIVITY -> "campus";
+            case ORGANIZER_PARTICIPANT_STUDENTS -> "student";
         };
     }
 }

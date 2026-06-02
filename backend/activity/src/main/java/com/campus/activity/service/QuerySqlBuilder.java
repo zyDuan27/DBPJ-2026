@@ -55,8 +55,14 @@ public class QuerySqlBuilder {
         if (user.role() == Role.STUDENT) {
             switch (intent) {
                 case ACTIVITY_LIST -> where.add("a.status IN ('PUBLISHED', 'ONGOING', 'FINISHED')");
+                case CAMPUS_WITHOUT_ACTIVITY -> {
+                }
                 case MY_REGISTRATION_LIST -> {
                     where.add("r.student_id = :currentUserId");
+                    params.put("currentUserId", user.id());
+                }
+                case MY_FEEDBACK_LIST -> {
+                    where.add("f.student_id = :currentUserId");
                     params.put("currentUserId", user.id());
                 }
                 case CREDIT_RECORDS -> {
@@ -76,7 +82,8 @@ public class QuerySqlBuilder {
                 where.add("a.organizer_id = :currentUserId");
                 params.put("currentUserId", user.id());
             }
-            case ACTIVITY_REGISTRATION_LIST, CHECK_IN_STATUS, ABSENCE_LIST, LOW_RATING_FEEDBACK, WAITLIST_TOP -> {
+            case ACTIVITY_REGISTRATION_LIST, CHECK_IN_STATUS, ABSENCE_LIST, LOW_RATING_FEEDBACK, WAITLIST_TOP,
+                 ORGANIZER_PARTICIPANT_STUDENTS -> {
                 where.add("a.organizer_id = :currentUserId");
                 params.put("currentUserId", user.id());
             }
@@ -179,6 +186,34 @@ public class QuerySqlBuilder {
                 "",
                 "f.rating ASC, f.updated_at DESC"
         ));
+        templates.put(QueryIntent.MY_FEEDBACK_LIST, new QueryTemplate(
+                List.of(
+                        col("feedbackId", "反馈ID", "number"),
+                        col("activityTitle", "活动名称", "string"),
+                        col("rating", "评分", "number"),
+                        col("content", "评价内容", "string"),
+                        col("campusName", "校区", "string"),
+                        col("venueName", "场地", "string"),
+                        col("updatedAt", "更新时间", "datetime")
+                ),
+                """
+                SELECT f.feedback_id AS feedbackId, a.title AS activityTitle,
+                       f.rating, f.content, c.campus_name AS campusName,
+                       v.venue_name AS venueName, f.updated_at AS updatedAt
+                FROM ActivityFeedback f
+                JOIN Activity a ON f.activity_id = a.activity_id
+                JOIN Venue v ON a.venue_id = v.venue_id
+                JOIN Campus c ON v.campus_id = c.campus_id
+                JOIN Category cat ON a.category_id = cat.category_id
+                JOIN User ou ON a.organizer_id = ou.user_id
+                """,
+                List.of(),
+                merge(commonActivityFilters("ou"), Map.of(
+                        "maxRating", "f.rating <= :maxRating"
+                )),
+                "",
+                "f.updated_at DESC, f.feedback_id DESC"
+        ));
         templates.put(QueryIntent.CREDIT_RISK, new QueryTemplate(
                 List.of(col("studentId", "学生ID", "number"), col("studentName", "学生", "string"),
                         col("studentNo", "学号", "string"), col("creditScore", "信用分", "number")),
@@ -238,6 +273,57 @@ public class QuerySqlBuilder {
                 "",
                 "n.is_read ASC, n.created_at DESC, n.notification_id DESC"
         ));
+        templates.put(QueryIntent.CAMPUS_WITHOUT_ACTIVITY, new QueryTemplate(
+                List.of(
+                        col("campusId", "校区ID", "number"),
+                        col("campusName", "校区名称", "string"),
+                        col("location", "位置", "string")
+                ),
+                """
+                SELECT c.campus_id AS campusId, c.campus_name AS campusName, c.location
+                FROM Campus c
+                """,
+                List.of("""
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM Venue v
+                            JOIN Activity a ON a.venue_id = v.venue_id
+                            WHERE v.campus_id = c.campus_id
+                              AND a.status IN ('PUBLISHED', 'ONGOING', 'FINISHED')
+                        )
+                        """),
+                Map.of("campusKeyword", "c.campus_name LIKE CONCAT('%', :campusKeyword, '%')"),
+                "",
+                "c.campus_id ASC"
+        ));
+        templates.put(QueryIntent.ORGANIZER_PARTICIPANT_STUDENTS, new QueryTemplate(
+                List.of(
+                        col("studentName", "学生姓名", "string"),
+                        col("studentNo", "学号", "string"),
+                        col("participationCount", "参与次数", "number"),
+                        col("lastActivityTitle", "最近参与活动", "string"),
+                        col("lastParticipationTime", "最近参与时间", "datetime")
+                ),
+                """
+                SELECT u.username AS studentName, u.student_no AS studentNo,
+                       COUNT(DISTINCT r.activity_id) AS participationCount,
+                       SUBSTRING_INDEX(GROUP_CONCAT(a.title ORDER BY r.registration_time DESC SEPARATOR '||'), '||', 1) AS lastActivityTitle,
+                       MAX(r.registration_time) AS lastParticipationTime
+                FROM Registration r
+                JOIN User u ON r.student_id = u.user_id
+                JOIN Activity a ON r.activity_id = a.activity_id
+                JOIN Venue v ON a.venue_id = v.venue_id
+                JOIN Campus c ON v.campus_id = c.campus_id
+                JOIN Category cat ON a.category_id = cat.category_id
+                JOIN User ou ON a.organizer_id = ou.user_id
+                """,
+                List.of("r.status IN ('ENROLLED', 'CHECKED_IN', 'ABSENT')"),
+                merge(commonActivityFilters("ou"), Map.of(
+                        "studentKeyword", "(u.username LIKE CONCAT('%', :studentKeyword, '%') OR u.student_no LIKE CONCAT('%', :studentKeyword, '%'))"
+                )),
+                "u.user_id, u.username, u.student_no",
+                "lastParticipationTime DESC, u.user_id DESC"
+        ));
     }
 
     private QueryTemplate registrationTemplate(String orderBy) {
@@ -282,7 +368,7 @@ public class QuerySqlBuilder {
         return Map.of(
                 "startFrom", "a.start_time >= :startFrom",
                 "startTo", "a.start_time < :startTo",
-                "activityKeyword", "a.title LIKE CONCAT('%', :activityKeyword, '%')",
+                "activityKeyword", "(a.title LIKE CONCAT('%', :activityKeyword, '%') OR a.description LIKE CONCAT('%', :activityKeyword, '%') OR cat.category_name LIKE CONCAT('%', :activityKeyword, '%') OR " + organizerAlias + ".username LIKE CONCAT('%', :activityKeyword, '%'))",
                 "activityStatus", "a.status = :activityStatus",
                 "categoryKeyword", "cat.category_name LIKE CONCAT('%', :categoryKeyword, '%')",
                 "campusKeyword", "c.campus_name LIKE CONCAT('%', :campusKeyword, '%')",

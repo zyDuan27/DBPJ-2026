@@ -2,6 +2,7 @@ package com.campus.activity.service;
 
 import com.campus.activity.common.BusinessException;
 import com.campus.activity.common.CurrentUser;
+import com.campus.activity.common.Role;
 import com.campus.activity.config.LlmProperties;
 import com.campus.activity.model.query.LlmQueryPlanDraft;
 import com.campus.activity.model.query.QueryPlanDecision;
@@ -43,10 +44,12 @@ public class LlmQueryPlanner {
         long startedAt = System.currentTimeMillis();
         String content = llmClient.chatJson(promptBuilder.systemPrompt(), promptBuilder.userPrompt(question, page, size, user));
         try {
-            QueryPlanDecision decision = validator.validate(parse(content), page, size);
+            QueryPlanDecision decision = decisionFromDraft(parse(content), page, size, user);
             log.info("LLM query plan generated in {} ms, intent={}",
                     System.currentTimeMillis() - startedAt,
-                    decision.plan() == null ? "CLARIFICATION" : decision.plan().getIntent());
+                    decision.queryMode() == com.campus.activity.model.query.QueryMode.ADMIN_SQL
+                            ? "ADMIN_SQL"
+                            : decision.plan() == null ? "CLARIFICATION" : decision.plan().getIntent());
             return decision;
         } catch (RuntimeException firstFailure) {
             if (!properties.isRepairEnabled()) {
@@ -54,10 +57,12 @@ public class LlmQueryPlanner {
             }
             String repaired = repairer.repair(question, page, size, user, content, firstFailure.getMessage());
             try {
-                QueryPlanDecision decision = validator.validate(parse(repaired), page, size);
+                QueryPlanDecision decision = decisionFromDraft(parse(repaired), page, size, user);
                 log.info("LLM query plan repaired in {} ms, intent={}",
                         System.currentTimeMillis() - startedAt,
-                        decision.plan() == null ? "CLARIFICATION" : decision.plan().getIntent());
+                        decision.queryMode() == com.campus.activity.model.query.QueryMode.ADMIN_SQL
+                                ? "ADMIN_SQL"
+                                : decision.plan() == null ? "CLARIFICATION" : decision.plan().getIntent());
                 return decision;
             } catch (RuntimeException secondFailure) {
                 if (secondFailure instanceof BusinessException businessException) {
@@ -66,6 +71,18 @@ public class LlmQueryPlanner {
                 throw new BusinessException(40002, "LLM 查询计划无法通过校验：" + secondFailure.getMessage());
             }
         }
+    }
+
+    private QueryPlanDecision decisionFromDraft(LlmQueryPlanDraft draft, Integer page, Integer size, CurrentUser user) {
+        if ("ADMIN_SQL".equalsIgnoreCase(draft.getQueryMode())) {
+            if (!properties.isAdminSqlEnabled()
+                    || !"ADMIN_ONLY".equalsIgnoreCase(properties.getSqlMode())
+                    || user.role() != Role.ADMIN) {
+                throw new BusinessException(40301, "当前角色无权使用管理员 SQL 草稿模式");
+            }
+            return QueryPlanDecision.adminSql(draft.getSql(), draft.getSummaryHint(), validator.adminSqlPreview(draft));
+        }
+        return validator.validate(draft, page, size);
     }
 
     private LlmQueryPlanDraft parse(String content) {

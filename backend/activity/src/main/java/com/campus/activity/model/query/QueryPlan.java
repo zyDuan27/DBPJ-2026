@@ -10,9 +10,12 @@ public class QueryPlan {
     private final List<String> metrics = new ArrayList<>();
     private final List<String> groupBy = new ArrayList<>();
     private final List<String> orderBy = new ArrayList<>();
+    private final List<String> exists = new ArrayList<>();
+    private final List<String> notExists = new ArrayList<>();
     private int page;
     private int size;
     private String planner = "rules";
+    private boolean distinct;
 
     public QueryPlan(QueryIntent intent, int page, int size) {
         this.intent = intent;
@@ -42,6 +45,22 @@ public class QueryPlan {
 
     public List<String> getOrderBy() {
         return orderBy;
+    }
+
+    public List<String> getExists() {
+        return exists;
+    }
+
+    public List<String> getNotExists() {
+        return notExists;
+    }
+
+    public boolean isDistinct() {
+        return distinct;
+    }
+
+    public void setDistinct(boolean distinct) {
+        this.distinct = distinct;
     }
 
     public int getPage() {
@@ -89,6 +108,18 @@ public class QueryPlan {
     public void addOrderBy(String field) {
         if (field != null && !field.isBlank()) {
             orderBy.add(field);
+        }
+    }
+
+    public void addExists(String relation) {
+        if (relation != null && !relation.isBlank()) {
+            exists.add(relation);
+        }
+    }
+
+    public void addNotExists(String relation) {
+        if (relation != null && !relation.isBlank()) {
+            notExists.add(relation);
         }
     }
 }

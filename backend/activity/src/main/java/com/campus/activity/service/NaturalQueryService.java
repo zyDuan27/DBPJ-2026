@@ -6,9 +6,11 @@ import com.campus.activity.common.CurrentUser;
 import com.campus.activity.common.Role;
 import com.campus.activity.model.dto.NaturalQueryRequest;
 import com.campus.activity.model.query.QueryExecution;
+import com.campus.activity.model.query.QueryMode;
 import com.campus.activity.model.query.QueryPlan;
 import com.campus.activity.model.query.QueryPlanDecision;
 import com.campus.activity.model.vo.NaturalQueryResultVO;
+import com.campus.activity.model.vo.QueryColumnVO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -28,6 +30,7 @@ public class NaturalQueryService {
     private final LlmResultSummarizer llmResultSummarizer;
     private final QueryPlanValidator queryPlanValidator;
     private final QuerySqlBuilder querySqlBuilder;
+    private final AdminSqlValidator adminSqlValidator;
     private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     public NaturalQueryService(QueryIntentParser queryIntentParser,
@@ -35,12 +38,14 @@ public class NaturalQueryService {
                                LlmResultSummarizer llmResultSummarizer,
                                QueryPlanValidator queryPlanValidator,
                                QuerySqlBuilder querySqlBuilder,
+                               AdminSqlValidator adminSqlValidator,
                                NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.queryIntentParser = queryIntentParser;
         this.llmQueryPlanner = llmQueryPlanner;
         this.llmResultSummarizer = llmResultSummarizer;
         this.queryPlanValidator = queryPlanValidator;
         this.querySqlBuilder = querySqlBuilder;
+        this.adminSqlValidator = adminSqlValidator;
         this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
@@ -49,6 +54,16 @@ public class NaturalQueryService {
         QueryPlanDecision decision = decidePlan(request, user);
         if (decision.clarificationRequired()) {
             return clarificationResult(decision, request);
+        }
+        if (decision.queryMode() == QueryMode.ADMIN_SQL) {
+            try {
+                return adminSqlResult(decision, request, user);
+            } catch (BusinessException ex) {
+                log.warn("Admin SQL draft rejected, fallback to rule parser: {}", ex.getMessage());
+                QueryPlan fallbackPlan = queryIntentParser.parse(request.question(), request.page(), request.size());
+                fallbackPlan.setPlanner("rules");
+                decision = QueryPlanDecision.executable(fallbackPlan, queryPlanValidator.planPreview(fallbackPlan, null));
+            }
         }
         QueryPlan plan = decision.plan();
         QueryExecution execution = querySqlBuilder.build(plan, user);
@@ -90,6 +105,53 @@ public class NaturalQueryService {
         }
         QueryPlan plan = queryIntentParser.parse(request.question(), request.page(), request.size());
         return QueryPlanDecision.executable(plan, queryPlanValidator.planPreview(plan, null));
+    }
+
+    private NaturalQueryResultVO adminSqlResult(QueryPlanDecision decision, NaturalQueryRequest request, CurrentUser user) {
+        if (user.role() != Role.ADMIN) {
+            throw new BusinessException(40301, "当前角色无权使用管理员 SQL 草稿模式");
+        }
+        String safeSql = adminSqlValidator.validateAndLimit(decision.adminSql());
+        List<Map<String, Object>> rows = namedParameterJdbcTemplate.queryForList(safeSql, Map.of());
+        List<QueryColumnVO> columns = deriveColumns(rows);
+        String summary = decision.summaryHint() == null || decision.summaryHint().isBlank()
+                ? "管理员 SQL 草稿查询返回 " + rows.size() + " 条结果。"
+                : decision.summaryHint();
+        return new NaturalQueryResultVO(
+                summary,
+                columns,
+                rows,
+                safeSql.replaceAll("\\s+", " ").trim(),
+                decision.planPreview(),
+                false,
+                List.of(),
+                "ADMIN_SQL",
+                request.page() == null ? 1 : request.page(),
+                request.size() == null ? 20 : Math.min(Math.max(request.size(), 1), 50),
+                rows.size()
+        );
+    }
+
+    private List<QueryColumnVO> deriveColumns(List<Map<String, Object>> rows) {
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        return rows.getFirst().entrySet().stream()
+                .map(entry -> new QueryColumnVO(entry.getKey(), entry.getKey(), inferColumnType(entry.getValue())))
+                .toList();
+    }
+
+    private String inferColumnType(Object value) {
+        if (value instanceof Number) {
+            return "number";
+        }
+        if (value instanceof Boolean) {
+            return "boolean";
+        }
+        if (value instanceof java.time.temporal.Temporal || value instanceof java.sql.Timestamp || value instanceof java.sql.Date) {
+            return "datetime";
+        }
+        return "string";
     }
 
     private NaturalQueryResultVO clarificationResult(QueryPlanDecision decision, NaturalQueryRequest request) {
@@ -178,9 +240,12 @@ public class NaturalQueryService {
             case CHECK_IN_STATUS -> "共查询到 " + total + " 条签到相关记录。";
             case ABSENCE_LIST -> "共查询到 " + total + " 条缺勤记录。";
             case LOW_RATING_FEEDBACK -> "共查询到 " + total + " 条低评分反馈。";
+            case MY_FEEDBACK_LIST -> "共查询到 " + total + " 条你的活动评价记录。";
             case CREDIT_RISK -> "共查询到 " + total + " 名学生的信用分，已按信用分从低到高排序。";
             case CREDIT_RECORDS -> "共查询到 " + total + " 条信用流水。";
             case NOTIFICATION_LIST -> "共查询到 " + total + " 条通知。";
+            case CAMPUS_WITHOUT_ACTIVITY -> "共查询到 " + total + " 个没有举办活动的校区。";
+            case ORGANIZER_PARTICIPANT_STUDENTS -> "共查询到 " + total + " 名参与过活动的学生。";
         };
     }
 }

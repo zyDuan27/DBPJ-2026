@@ -15,6 +15,12 @@ public class QueryIntentParser {
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_SIZE = 20;
     private static final int MAX_SIZE = 50;
+    private static final List<Pattern> SEMANTIC_ACTIVITY_KEYWORD_PATTERNS = List.of(
+            Pattern.compile(".*(?:和|与)(.+?)(?:相关|有关)的?活动.*"),
+            Pattern.compile(".*关于(.+?)的?活动.*"),
+            Pattern.compile(".*查询(?:一个|一些|有关)?(.+?)(?:相关|有关)的?活动.*"),
+            Pattern.compile(".*查询(?:一个|一些)?(.+?)活动.*")
+    );
     private static final Pattern CREDIT_SCORE_LIMIT = Pattern.compile("信用分(?:低于|小于|不高于|<=?)(\\d{1,3})");
 
     public QueryPlan parse(String question, Integer page, Integer size) {
@@ -28,6 +34,12 @@ public class QueryIntentParser {
         if (containsAny(text, "删除", "新增", "插入", "更新", "修改", "清空")) {
             throw new BusinessException(40002, "自然语言查询只支持只读查询");
         }
+        if (containsAny(text, "校区") && containsAny(text, "未举办", "没有活动", "无活动", "没活动")) {
+            return QueryIntent.CAMPUS_WITHOUT_ACTIVITY;
+        }
+        if (containsAny(text, "学生") && containsAny(text, "参与过", "参加过") && containsAny(text, "我创建", "我发布", "我的活动")) {
+            return QueryIntent.ORGANIZER_PARTICIPANT_STUDENTS;
+        }
         if (containsAny(text, "未读通知", "通知")) {
             return QueryIntent.NOTIFICATION_LIST;
         }
@@ -36,6 +48,9 @@ public class QueryIntentParser {
         }
         if (containsAny(text, "信用分低", "信用风险")) {
             return QueryIntent.CREDIT_RISK;
+        }
+        if (containsAny(text, "我的评价", "我的活动评价", "评价记录", "反馈记录") && containsAny(text, "我的", "我")) {
+            return QueryIntent.MY_FEEDBACK_LIST;
         }
         if (containsAny(text, "低评分", "低分反馈", "差评")) {
             return QueryIntent.LOW_RATING_FEEDBACK;
@@ -91,6 +106,7 @@ public class QueryIntentParser {
             plan.addFilter("organizerKeyword", "计算机协会");
         }
         applyActivityKeywordSlot(plan, text);
+        applySemanticActivityKeywordSlot(plan, text);
         applyStudentKeywordSlot(plan, text);
         if (text.contains("未读")) {
             plan.addFilter("unreadOnly", true);
@@ -140,6 +156,55 @@ public class QueryIntentParser {
         if (!prefix.isBlank() && !containsAny(prefix, "我的", "某活动")) {
             plan.addFilter("activityKeyword", prefix);
         }
+    }
+
+    private void applySemanticActivityKeywordSlot(QueryPlan plan, String text) {
+        if (plan.getIntent() != QueryIntent.ACTIVITY_LIST
+                || plan.getFilters().stream().anyMatch(filter -> "activityKeyword".equals(filter.key()))) {
+            return;
+        }
+        for (Pattern pattern : SEMANTIC_ACTIVITY_KEYWORD_PATTERNS) {
+            Matcher matcher = pattern.matcher(text);
+            if (!matcher.matches()) {
+                continue;
+            }
+            String keyword = normalizeSemanticActivityKeyword(matcher.group(1));
+            if (isUsefulActivityKeyword(keyword)) {
+                plan.addFilter("activityKeyword", keyword);
+                return;
+            }
+        }
+    }
+
+    private String normalizeSemanticActivityKeyword(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text
+                .replace("查询", "")
+                .replace("查找", "")
+                .replace("查看", "")
+                .replace("查一下", "")
+                .replace("看看", "")
+                .replace("一个", "")
+                .replace("一些", "")
+                .replace("有关", "")
+                .replace("相关", "")
+                .replace("关于", "")
+                .replace("活动", "")
+                .replace("的", "")
+                .replace("和", "")
+                .replace("与", "")
+                .trim();
+    }
+
+    private boolean isUsefulActivityKeyword(String keyword) {
+        if (keyword == null || keyword.isBlank() || keyword.length() < 2) {
+            return false;
+        }
+        return !containsAny(keyword,
+                "今天", "明天", "昨天", "本月", "待审核", "已发布", "发布",
+                "报名", "名单", "签到", "缺勤", "通知", "校区", "场地");
     }
 
     private void applyStudentKeywordSlot(QueryPlan plan, String text) {

@@ -13,6 +13,8 @@ public class LlmProperties {
     private boolean responseFormatEnabled = false;
     private boolean repairEnabled = false;
     private boolean summaryEnabled = false;
+    private String sqlMode = "ADMIN_ONLY";
+    private boolean adminSqlEnabled = true;
 
     public boolean isEnabled() {
         return enabled;
@@ -84,6 +86,22 @@ public class LlmProperties {
 
     public void setSummaryEnabled(boolean summaryEnabled) {
         this.summaryEnabled = summaryEnabled;
+    }
+
+    public String getSqlMode() {
+        return sqlMode;
+    }
+
+    public void setSqlMode(String sqlMode) {
+        this.sqlMode = sqlMode;
+    }
+
+    public boolean isAdminSqlEnabled() {
+        return adminSqlEnabled;
+    }
+
+    public void setAdminSqlEnabled(boolean adminSqlEnabled) {
+        this.adminSqlEnabled = adminSqlEnabled;
     }
 
     public boolean isReady() {
