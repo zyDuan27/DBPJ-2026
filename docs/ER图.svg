@@ -1,0 +1,312 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="6400" height="4200" viewBox="0 0 6400 4200">
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .entity { fill: #fff7e6; stroke: #222222; stroke-width: 4; }
+      .relation { fill: #eef6ff; stroke: #222222; stroke-width: 4; }
+      .attr { fill: #f8fbff; stroke: #222222; stroke-width: 3; }
+      .line { stroke: #333333; stroke-width: 3; fill: none; }
+      .weak { stroke-dasharray: 12 8; }
+      .title { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 58px; font-weight: 700; fill: #111111; }
+      .note { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 25px; fill: #444444; }
+      .entityText { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 35px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: #111111; }
+      .relText { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 29px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; fill: #111111; }
+      .attrText { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 24px; text-anchor: middle; dominant-baseline: middle; fill: #111111; }
+      .pk { text-decoration: underline; font-weight: 700; }
+      .card { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 30px; font-weight: 700; fill: #b42318; }
+      .label { font-family: "Microsoft YaHei", Arial, sans-serif; font-size: 24px; fill: #555555; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="6400" height="4200"/>
+  <text class="title" x="3200" y="95" text-anchor="middle">校园活动报名系统 ER 图（Chen 表示法）</text>
+  <text class="note" x="3200" y="145" text-anchor="middle">矩形=实体，菱形=联系，椭圆=属性，主属性下划线；虚线表示无数据库外键的弱业务关联</text>
+
+  <!-- ========================= Entities ========================= -->
+  <rect class="entity" x="520" y="1650" width="280" height="90"/>
+  <text class="entityText" x="660" y="1695">User</text>
+
+  <rect class="entity" x="520" y="650" width="340" height="90"/>
+  <text class="entityText" x="690" y="695">Notification</text>
+
+  <rect class="entity" x="520" y="3220" width="360" height="90"/>
+  <text class="entityText" x="700" y="3265">CreditRecord</text>
+
+  <rect class="entity" x="2940" y="350" width="300" height="90"/>
+  <text class="entityText" x="3090" y="395">Campus</text>
+
+  <rect class="entity" x="2940" y="940" width="300" height="90"/>
+  <text class="entityText" x="3090" y="985">Venue</text>
+
+  <rect class="entity" x="2940" y="1700" width="320" height="90"/>
+  <text class="entityText" x="3100" y="1745">Activity</text>
+
+  <rect class="entity" x="2940" y="2600" width="380" height="90"/>
+  <text class="entityText" x="3130" y="2645">Registration</text>
+
+  <rect class="entity" x="4940" y="940" width="320" height="90"/>
+  <text class="entityText" x="5100" y="985">Category</text>
+
+  <rect class="entity" x="4940" y="2600" width="420" height="90"/>
+  <text class="entityText" x="5150" y="2645">ActivityFeedback</text>
+
+  <!-- ========================= Attributes: User ========================= -->
+  <line class="line" x1="610" y1="1650" x2="450" y2="1505"/>
+  <ellipse class="attr" cx="400" cy="1480" rx="135" ry="44"/>
+  <text class="attrText pk" x="400" y="1480">user_id</text>
+  <line class="line" x1="520" y1="1665" x2="330" y2="1595"/>
+  <ellipse class="attr" cx="280" cy="1580" rx="105" ry="44"/>
+  <text class="attrText" x="280" y="1580">role</text>
+  <line class="line" x1="760" y1="1650" x2="910" y2="1505"/>
+  <ellipse class="attr" cx="960" cy="1480" rx="145" ry="44"/>
+  <text class="attrText" x="960" y="1480">username</text>
+  <line class="line" x1="520" y1="1700" x2="340" y2="1780"/>
+  <ellipse class="attr" cx="300" cy="1800" rx="150" ry="44"/>
+  <text class="attrText" x="300" y="1800">student_no UK</text>
+  <line class="line" x1="800" y1="1700" x2="975" y2="1780"/>
+  <ellipse class="attr" cx="1030" cy="1800" rx="125" ry="44"/>
+  <text class="attrText" x="1030" y="1800">phone UK</text>
+  <line class="line" x1="520" y1="1725" x2="330" y2="1930"/>
+  <ellipse class="attr" cx="285" cy="1960" rx="135" ry="44"/>
+  <text class="attrText" x="285" y="1960">password</text>
+
+  <!-- ========================= Attributes: Notification ========================= -->
+  <line class="line" x1="640" y1="650" x2="450" y2="530"/>
+  <ellipse class="attr" cx="395" cy="510" rx="185" ry="44"/>
+  <text class="attrText pk" x="395" y="510">notification_id</text>
+  <line class="line" x1="520" y1="700" x2="300" y2="700"/>
+  <ellipse class="attr" cx="240" cy="700" rx="150" ry="44"/>
+  <text class="attrText" x="240" y="700">recipient_id FK</text>
+  <line class="line" x1="860" y1="690" x2="1060" y2="690"/>
+  <ellipse class="attr" cx="1110" cy="690" rx="105" ry="44"/>
+  <text class="attrText" x="1110" y="690">type</text>
+  <line class="line" x1="690" y1="740" x2="690" y2="880"/>
+  <ellipse class="attr" cx="690" cy="920" rx="110" ry="44"/>
+  <text class="attrText" x="690" y="920">title</text>
+  <line class="line" x1="800" y1="740" x2="1010" y2="875"/>
+  <ellipse class="attr" cx="1060" cy="900" rx="130" ry="44"/>
+  <text class="attrText" x="1060" y="900">content</text>
+  <line class="line weak" x1="560" y1="740" x2="400" y2="895"/>
+  <ellipse class="attr" cx="340" cy="925" rx="205" ry="44"/>
+  <text class="attrText" x="340" y="925">related_type/id</text>
+  <line class="line" x1="800" y1="650" x2="1035" y2="535"/>
+  <ellipse class="attr" cx="1090" cy="510" rx="120" ry="44"/>
+  <text class="attrText" x="1090" y="510">is_read</text>
+
+  <!-- ========================= Attributes: CreditRecord ========================= -->
+  <line class="line" x1="650" y1="3220" x2="455" y2="3075"/>
+  <ellipse class="attr" cx="405" cy="3050" rx="145" ry="44"/>
+  <text class="attrText pk" x="405" y="3050">record_id</text>
+  <line class="line" x1="520" y1="3270" x2="290" y2="3270"/>
+  <ellipse class="attr" cx="230" cy="3270" rx="150" ry="44"/>
+  <text class="attrText" x="230" y="3270">student_id FK</text>
+  <line class="line" x1="880" y1="3260" x2="1130" y2="3260"/>
+  <ellipse class="attr" cx="1190" cy="3260" rx="150" ry="44"/>
+  <text class="attrText" x="1190" y="3260">reason_type</text>
+  <line class="line" x1="700" y1="3310" x2="700" y2="3450"/>
+  <ellipse class="attr" cx="700" cy="3490" rx="165" ry="44"/>
+  <text class="attrText" x="700" y="3490">change_value</text>
+  <line class="line" x1="850" y1="3310" x2="1080" y2="3450"/>
+  <ellipse class="attr" cx="1140" cy="3485" rx="160" ry="44"/>
+  <text class="attrText" x="1140" y="3485">operator_id FK</text>
+  <line class="line" x1="880" y1="3225" x2="1140" y2="3095"/>
+  <ellipse class="attr" cx="1200" cy="3065" rx="190" ry="44"/>
+  <text class="attrText" x="1200" y="3065">activity_id FK</text>
+  <line class="line" x1="520" y1="3310" x2="360" y2="3440"/>
+  <ellipse class="attr" cx="320" cy="3470" rx="205" ry="44"/>
+  <text class="attrText" x="320" y="3470">registration_id FK</text>
+
+  <!-- ========================= Attributes: Campus ========================= -->
+  <line class="line" x1="3020" y1="350" x2="2845" y2="250"/>
+  <ellipse class="attr" cx="2800" cy="225" rx="145" ry="44"/>
+  <text class="attrText pk" x="2800" y="225">campus_id</text>
+  <line class="line" x1="3090" y1="350" x2="3090" y2="250"/>
+  <ellipse class="attr" cx="3090" cy="225" rx="185" ry="44"/>
+  <text class="attrText" x="3090" y="225">campus_name UK</text>
+  <line class="line" x1="3190" y1="350" x2="3370" y2="250"/>
+  <ellipse class="attr" cx="3420" cy="225" rx="125" ry="44"/>
+  <text class="attrText" x="3420" y="225">location</text>
+
+  <!-- ========================= Attributes: Venue ========================= -->
+  <line class="line" x1="3000" y1="940" x2="2830" y2="840"/>
+  <ellipse class="attr" cx="2780" cy="815" rx="130" ry="44"/>
+  <text class="attrText pk" x="2780" y="815">venue_id</text>
+  <line class="line" x1="3090" y1="940" x2="3090" y2="840"/>
+  <ellipse class="attr" cx="3090" cy="815" rx="145" ry="44"/>
+  <text class="attrText" x="3090" y="815">venue_name</text>
+  <line class="line" x1="3210" y1="950" x2="3390" y2="840"/>
+  <ellipse class="attr" cx="3450" cy="815" rx="160" ry="44"/>
+  <text class="attrText" x="3450" y="815">room_number</text>
+  <line class="line" x1="2940" y1="1010" x2="2780" y2="1110"/>
+  <ellipse class="attr" cx="2740" cy="1135" rx="120" ry="44"/>
+  <text class="attrText" x="2740" y="1135">capacity</text>
+  <line class="line" x1="3240" y1="1010" x2="3410" y2="1110"/>
+  <ellipse class="attr" cx="3460" cy="1135" rx="145" ry="44"/>
+  <text class="attrText" x="3460" y="1135">campus_id FK</text>
+
+  <!-- ========================= Attributes: Category ========================= -->
+  <line class="line" x1="5040" y1="940" x2="4880" y2="840"/>
+  <ellipse class="attr" cx="4830" cy="815" rx="150" ry="44"/>
+  <text class="attrText pk" x="4830" y="815">category_id</text>
+  <line class="line" x1="5160" y1="940" x2="5350" y2="840"/>
+  <ellipse class="attr" cx="5410" cy="815" rx="195" ry="44"/>
+  <text class="attrText" x="5410" y="815">category_name UK</text>
+
+  <!-- ========================= Attributes: Activity ========================= -->
+  <line class="line" x1="3000" y1="1700" x2="2810" y2="1575"/>
+  <ellipse class="attr" cx="2760" cy="1545" rx="145" ry="44"/>
+  <text class="attrText pk" x="2760" y="1545">activity_id</text>
+  <line class="line" x1="3100" y1="1700" x2="3100" y2="1580"/>
+  <ellipse class="attr" cx="3100" cy="1545" rx="105" ry="44"/>
+  <text class="attrText" x="3100" y="1545">title</text>
+  <line class="line" x1="3260" y1="1715" x2="3510" y2="1590"/>
+  <ellipse class="attr" cx="3580" cy="1560" rx="190" ry="44"/>
+  <text class="attrText" x="3580" y="1560">start/end_time</text>
+  <line class="line" x1="2940" y1="1745" x2="2600" y2="1745"/>
+  <ellipse class="attr" cx="2530" cy="1745" rx="175" ry="44"/>
+  <text class="attrText" x="2530" y="1745">enroll_deadline</text>
+  <line class="line" x1="3260" y1="1745" x2="3570" y2="1745"/>
+  <ellipse class="attr" cx="3640" cy="1745" rx="235" ry="44"/>
+  <text class="attrText" x="3640" y="1745">capacity/current_enrollment</text>
+  <line class="line" x1="2940" y1="1785" x2="2600" y2="1900"/>
+  <ellipse class="attr" cx="2540" cy="1920" rx="115" ry="44"/>
+  <text class="attrText" x="2540" y="1920">status</text>
+  <line class="line" x1="3100" y1="1790" x2="3100" y2="1935"/>
+  <ellipse class="attr" cx="3100" cy="1970" rx="205" ry="44"/>
+  <text class="attrText" x="3100" y="1970">venue/category FK</text>
+  <line class="line" x1="3260" y1="1785" x2="3540" y2="1900"/>
+  <ellipse class="attr" cx="3610" cy="1920" rx="215" ry="44"/>
+  <text class="attrText" x="3610" y="1920">organizer/admin FK</text>
+
+  <!-- ========================= Attributes: Registration ========================= -->
+  <line class="line" x1="3020" y1="2600" x2="2810" y2="2475"/>
+  <ellipse class="attr" cx="2750" cy="2450" rx="175" ry="44"/>
+  <text class="attrText pk" x="2750" y="2450">registration_id</text>
+  <line class="line" x1="2940" y1="2645" x2="2600" y2="2645"/>
+  <ellipse class="attr" cx="2530" cy="2645" rx="195" ry="44"/>
+  <text class="attrText" x="2530" y="2645">student/activity FK</text>
+  <line class="line" x1="3320" y1="2645" x2="3630" y2="2645"/>
+  <ellipse class="attr" cx="3690" cy="2645" rx="115" ry="44"/>
+  <text class="attrText" x="3690" y="2645">status</text>
+  <line class="line" x1="3130" y1="2690" x2="3130" y2="2825"/>
+  <ellipse class="attr" cx="3130" cy="2865" rx="190" ry="44"/>
+  <text class="attrText" x="3130" y="2865">registration_time</text>
+  <line class="line" x1="2940" y1="2685" x2="2770" y2="2815"/>
+  <ellipse class="attr" cx="2720" cy="2845" rx="125" ry="44"/>
+  <text class="attrText" x="2720" y="2845">queue_no</text>
+  <line class="line" x1="3320" y1="2685" x2="3500" y2="2815"/>
+  <ellipse class="attr" cx="3560" cy="2845" rx="155" ry="44"/>
+  <text class="attrText" x="3560" y="2845">check_in_time</text>
+
+  <!-- ========================= Attributes: ActivityFeedback ========================= -->
+  <line class="line" x1="5050" y1="2600" x2="4860" y2="2475"/>
+  <ellipse class="attr" cx="4800" cy="2450" rx="150" ry="44"/>
+  <text class="attrText pk" x="4800" y="2450">feedback_id</text>
+  <line class="line" x1="4940" y1="2645" x2="4640" y2="2645"/>
+  <ellipse class="attr" cx="4580" cy="2645" rx="185" ry="44"/>
+  <text class="attrText" x="4580" y="2645">registration_id FK</text>
+  <line class="line" x1="5360" y1="2645" x2="5650" y2="2645"/>
+  <ellipse class="attr" cx="5710" cy="2645" rx="115" ry="44"/>
+  <text class="attrText" x="5710" y="2645">rating</text>
+  <line class="line" x1="5150" y1="2690" x2="5150" y2="2825"/>
+  <ellipse class="attr" cx="5150" cy="2865" rx="125" ry="44"/>
+  <text class="attrText" x="5150" y="2865">content</text>
+  <line class="line" x1="5360" y1="2605" x2="5590" y2="2480"/>
+  <ellipse class="attr" cx="5650" cy="2450" rx="185" ry="44"/>
+  <text class="attrText" x="5650" y="2450">activity/student FK</text>
+
+  <!-- ========================= Relationships: main chain ========================= -->
+  <polygon class="relation" points="3090,585 3220,660 3090,735 2960,660"/>
+  <text class="relText" x="3090" y="660">包含</text>
+  <line class="line" x1="3090" y1="440" x2="3090" y2="585"/>
+  <line class="line" x1="3090" y1="735" x2="3090" y2="940"/>
+  <text class="card" x="3125" y="535">1</text>
+  <text class="card" x="3125" y="890">N</text>
+
+  <polygon class="relation" points="3090,1280 3220,1355 3090,1430 2960,1355"/>
+  <text class="relText" x="3090" y="1355">举办于</text>
+  <line class="line" x1="3090" y1="1030" x2="3090" y2="1280"/>
+  <line class="line" x1="3090" y1="1430" x2="3090" y2="1700"/>
+  <text class="card" x="3125" y="1145">1</text>
+  <text class="card" x="3125" y="1640">N</text>
+
+  <polygon class="relation" points="4210,1110 4350,1185 4210,1260 4070,1185"/>
+  <text class="relText" x="4210" y="1185">分类</text>
+  <polyline class="line" points="4940,985 4600,985 4350,1185"/>
+  <polyline class="line" points="4070,1185 3630,1185 3260,1700"/>
+  <text class="card" x="4740" y="945">1</text>
+  <text class="card" x="3440" y="1580">N</text>
+
+  <polygon class="relation" points="3130,2160 3270,2235 3130,2310 2990,2235"/>
+  <text class="relText" x="3130" y="2235">接收报名</text>
+  <line class="line" x1="3130" y1="1790" x2="3130" y2="2160"/>
+  <line class="line" x1="3130" y1="2310" x2="3130" y2="2600"/>
+  <text class="card" x="3165" y="1995">1</text>
+  <text class="card" x="3165" y="2540">N</text>
+
+  <polygon class="relation" points="4240,2570 4380,2645 4240,2720 4100,2645"/>
+  <text class="relText" x="4240" y="2645">产生评价</text>
+  <line class="line" x1="3320" y1="2645" x2="4100" y2="2645"/>
+  <line class="line" x1="4380" y1="2645" x2="4940" y2="2645"/>
+  <text class="card" x="3480" y="2605">1</text>
+  <text class="card" x="4780" y="2605">1</text>
+
+  <!-- ========================= Relationships: User to activity/registration ========================= -->
+  <polygon class="relation" points="1580,1375 1720,1450 1580,1525 1440,1450"/>
+  <text class="relText" x="1580" y="1450">组织</text>
+  <polyline class="line" points="800,1670 1120,1670 1440,1450"/>
+  <polyline class="line" points="1720,1450 2300,1450 2940,1715"/>
+  <text class="card" x="1040" y="1640">1</text>
+  <text class="card" x="2800" y="1650">N</text>
+
+  <polygon class="relation" points="1580,1655 1720,1730 1580,1805 1440,1730"/>
+  <text class="relText" x="1580" y="1730">审核</text>
+  <polyline class="line" points="800,1710 1160,1710 1440,1730"/>
+  <polyline class="line" points="1720,1730 2200,1730 2940,1745"/>
+  <text class="card" x="1040" y="1760">1</text>
+  <text class="card" x="2800" y="1710">N</text>
+
+  <polygon class="relation" points="1580,2285 1720,2360 1580,2435 1440,2360"/>
+  <text class="relText" x="1580" y="2360">报名</text>
+  <polyline class="line" points="700,1740 700,2360 1440,2360"/>
+  <line class="line" x1="1720" y1="2360" x2="2940" y2="2635"/>
+  <text class="card" x="740" y="2110">1</text>
+  <text class="card" x="2820" y="2590">N</text>
+
+  <polygon class="relation" points="4280,2160 4420,2235 4280,2310 4140,2235"/>
+  <text class="relText" x="4280" y="2235">被评价</text>
+  <polyline class="line" points="3260,1780 3800,1780 4140,2235"/>
+  <polyline class="line" points="4420,2235 5150,2235 5150,2600"/>
+  <text class="card" x="3520" y="1740">1</text>
+  <text class="card" x="5190" y="2520">N</text>
+
+  <!-- ========================= Relationships: notification and credit ========================= -->
+  <polygon class="relation" points="1280,1180 1420,1255 1280,1330 1140,1255"/>
+  <text class="relText" x="1280" y="1255">接收通知</text>
+  <polyline class="line" points="760,740 760,1080 1140,1255"/>
+  <polyline class="line" points="1280,1330 1280,1600 800,1665"/>
+  <text class="card" x="790" y="980">N</text>
+  <text class="card" x="930" y="1620">1</text>
+
+  <polygon class="relation" points="1260,2805 1400,2880 1260,2955 1120,2880"/>
+  <text class="relText" x="1260" y="2880">信用归属</text>
+  <polyline class="line" points="800,1735 1260,1735 1260,2805"/>
+  <polyline class="line" points="1120,2880 930,2880 880,3225"/>
+  <text class="card" x="1250" y="2050">1</text>
+  <text class="card" x="940" y="3160">N</text>
+
+  <polygon class="relation" points="1600,3020 1740,3095 1600,3170 1460,3095"/>
+  <text class="relText" x="1600" y="3095">活动信用</text>
+  <polyline class="line" points="2940,1785 2320,1785 2320,3095 1740,3095"/>
+  <line class="line" x1="1460" y1="3095" x2="880" y2="3245"/>
+  <text class="card" x="2370" y="2070">1</text>
+  <text class="card" x="1060" y="3190">N</text>
+
+  <polygon class="relation" points="1900,3340 2040,3415 1900,3490 1760,3415"/>
+  <text class="relText" x="1900" y="3415">关联报名</text>
+  <polyline class="line" points="2940,2680 2380,2680 2380,3415 2040,3415"/>
+  <line class="line" x1="1760" y1="3415" x2="880" y2="3285"/>
+  <text class="card" x="2430" y="2960">1</text>
+  <text class="card" x="1040" y="3340">N</text>
+
+</svg>
