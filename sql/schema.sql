@@ -4,6 +4,12 @@
 -- 数据库：MySQL 8.4.8 LTS
 -- ======================================================
 
+-- Main initialization script.
+-- Fresh databases should run this file only. It already contains the current
+-- table definitions, constraints, indexes, triggers and seed data.
+-- Other sql/phase*.sql and migration scripts are kept only for upgrading old
+-- initialized databases.
+
 SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 
